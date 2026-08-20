@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "packId": "kikongo_pack_0001",
+  "version": 1,
+  "name": "Kikongo — Lot 0001",
+  "language": "kg",
+  "items": [
+    {
+      "id": "kikongo_pack_0001_item_0000",
+      "image": "images/img_0000.webp",
+      "question": "Décrivez précisément cette image en kikongo.",
+      "minWords": 15,
+      "metadata": {
+        "source": "production",
+        "category": "general"
+      }
+    },
+    {
+      "id": "kikongo_pack_0001_item_0001",
+      "image": "images/img_0001.webp",
+      "question": "Écrivez un dialogue bref inspiré de cette image.",
+      "minWords": 25,
+      "metadata": {
+        "source": "control",
+        "category": "dialogue"
+      }
+    }
+  ]
+}
