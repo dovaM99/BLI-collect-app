@@ -125,6 +125,23 @@ const fr: Record<string, string> = {
   emptyPack: 'Ce lot ne contient aucune image.',
   waitingForFirstBlock: 'En attente du premier bloc',
   minimum: 'Minimum',
+  collectorCode: 'Code collecteur',
+  collectorCodeHelp: 'Le code figure sur la fiche remise par BLI. Il rattache votre travail à votre nom.',
+  collectorCodeInvalid: 'Ce code est incorrect. Vérifiez chaque caractère avant de continuer.',
+  collectorCodeVerified: 'Code vérifié',
+  targetLanguage: 'Langue de collecte',
+  targetLanguageBody: 'Vous écrirez toutes vos réponses dans cette langue. Les consignes seront affichées dans cette langue.',
+  targetLanguageRequired: 'Choisissez la langue dans laquelle vous allez travailler.',
+  writeIn: 'Répondez en {language}',
+  collectorIdentity: 'Identité du collecteur',
+  collectorIdentityBody: 'Ces informations accompagnent chaque export. Pour en changer, déconnectez-vous.',
+  languageNotAvailable: 'Ce lot ne contient aucune consigne dans votre langue de collecte. Vérifiez l’affectation reçue.',
+  driveQuotaExceeded: 'Google Drive a bloqué ce fichier : son quota de téléchargement est épuisé pour aujourd’hui. Réessayez plus tard ou demandez un nouveau lien.',
+  driveAccessDenied: 'Google Drive refuse l’accès à ce fichier. Le partage doit être ouvert en « Lecteur par lien ».',
+  downloadRateLimited: 'Le serveur demande de ralentir. Le téléchargement reprendra là où il s’est arrêté.',
+  networkUnavailable: 'Connexion interrompue. Ce qui est déjà téléchargé est conservé : relancez pour reprendre.',
+  downloadIncomplete: 'Le téléchargement est incomplet. Relancez-le : il reprendra à l’endroit exact où il s’est arrêté.',
+  exportFilesOnDevice: '{count} fichier(s) d’export déjà présent(s) sur l’appareil.',
 };
 
 const en: Record<string, string> = {
@@ -252,12 +269,29 @@ const en: Record<string, string> = {
   emptyPack: 'This pack does not contain any images.',
   waitingForFirstBlock: 'Waiting for the first block',
   minimum: 'Minimum',
+  collectorCode: 'Collector code',
+  collectorCodeHelp: 'The code is on the sheet handed out by BLI. It ties your work to your name.',
+  collectorCodeInvalid: 'This code is incorrect. Check every character before continuing.',
+  collectorCodeVerified: 'Code verified',
+  targetLanguage: 'Collection language',
+  targetLanguageBody: 'You will write every answer in this language. Instructions will be shown in this language.',
+  targetLanguageRequired: 'Choose the language you will be working in.',
+  writeIn: 'Answer in {language}',
+  collectorIdentity: 'Collector identity',
+  collectorIdentityBody: 'This information travels with every export. Log out to change it.',
+  languageNotAvailable: 'This pack has no instruction in your collection language. Check the assignment you received.',
+  driveQuotaExceeded: 'Google Drive blocked this file: its download quota is exhausted for today. Try later or ask for a new link.',
+  driveAccessDenied: 'Google Drive denies access to this file. Sharing must be open to "Anyone with the link".',
+  downloadRateLimited: 'The server is asking us to slow down. The download will resume where it stopped.',
+  networkUnavailable: 'Connection lost. What is already downloaded is kept: start again to resume.',
+  downloadIncomplete: 'The download is incomplete. Start it again: it will resume exactly where it stopped.',
+  exportFilesOnDevice: '{count} export file(s) already on this device.',
 };
 
 export function translate(language: Language, key: string, values?: Record<string, string | number>) {
   let value = (language === 'fr' ? fr : en)[key] ?? key;
   Object.entries(values ?? {}).forEach(([name, replacement]) => {
-    value = value.replace(`{${name}}`, String(replacement));
+    value = value.split(`{${name}}`).join(String(replacement));
   });
   return value;
 }

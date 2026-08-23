@@ -3,6 +3,7 @@
   "assignmentId": "assignment_0001",
   "version": 1,
   "targetItems": 2,
+  "language": "kg",
   "packs": [
     {
       "packId": "kikongo_pack_0001",

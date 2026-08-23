@@ -1,25 +1,40 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "packId": "kikongo_pack_0001",
   "version": 1,
-  "name": "Kikongo — Lot 0001",
-  "language": "kg",
+  "name": "Lot 0001 — scènes de vie quotidienne",
+  "nameEn": "Pack 0001 — everyday life scenes",
+  "languages": ["ln", "ktu", "kg"],
   "items": [
     {
       "id": "kikongo_pack_0001_item_0000",
       "image": "images/img_0000.webp",
-      "question": "Décrivez précisément cette image en kikongo.",
+      "prompts": {
+        "ln": "Lobá na ntína ya elɔ́kɔ ya libosó ozali komóna na elilingi oyo.",
+        "ktu": "Tubila kima ya ntete ya nge ke mona na kifwanisu yayi.",
+        "kg": "Tubila lekwa dia ntete oyo omweni mu kifwaniswa kiaki."
+      },
       "minWords": 15,
       "metadata": {
         "source": "production",
-        "category": "general"
+        "category": "general",
+        "famille": "vie_quotidienne"
       }
     },
     {
       "id": "kikongo_pack_0001_item_0001",
       "image": "images/img_0001.webp",
-      "question": "Écrivez un dialogue bref inspiré de cette image.",
-      "minWords": 25,
+      "prompts": {
+        "ln": "Kómá lisolo ya mokuse oyo euti na elilingi oyo.",
+        "ktu": "Sonika disolo ya nkufi yina me katuka na kifwanisu yayi.",
+        "kg": "Soneka disolo dia nkufi diatuka mu kifwaniswa kiaki."
+      },
+      "minWords": {
+        "ln": 25,
+        "ktu": 25,
+        "kg": 22
+      },
+      "credit": "Wikimedia Commons — CC BY-SA 4.0",
       "metadata": {
         "source": "control",
         "category": "dialogue"

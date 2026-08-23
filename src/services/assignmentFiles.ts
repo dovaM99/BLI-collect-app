@@ -1,15 +1,22 @@
 import { sha256 } from '@noble/hashes/sha256';
 import * as DocumentPicker from 'expo-document-picker';
 import { Directory, File, Paths } from 'expo-file-system';
-import * as LegacyFileSystem from 'expo-file-system/legacy';
 import { inflateSync } from 'fflate';
 import { Platform } from 'react-native';
 
+import { downloadWithResume } from './downloader';
+import {
+  isTargetLanguage,
+  itemSupportsLanguage,
+  languagesOf,
+} from '../utils/targetLanguages';
 import type {
+  ArchivePackItem,
   ArchivePackManifest,
   AssignmentDownload,
   AssignmentManifest,
   AssignmentPackReference,
+  TargetLanguage,
   TaskItem,
   TaskPack,
 } from '../types';
@@ -106,6 +113,10 @@ function assertAssignmentManifest(value: unknown): asserts value is AssignmentMa
     throw new Error('INVALID_ASSIGNMENT');
   }
 
+  if (manifest.language !== undefined && !isTargetLanguage(manifest.language)) {
+    throw new Error('INVALID_ASSIGNMENT');
+  }
+
   const packIds = new Set<string>();
   for (const pack of manifest.packs) {
     if (
@@ -170,24 +181,67 @@ function assertPackManifest(
     throw new Error('INVALID_PACK_MANIFEST');
   }
 
-  const ids = new Set<string>();
-  for (const item of manifest.items) {
+  if (manifest.languages !== undefined) {
     if (
-      !item?.id
-      || ids.has(item.id)
-      || !item.image
-      || !item.question?.trim()
-      || !Number.isInteger(item.minWords)
-      || item.minWords < 1
+      !Array.isArray(manifest.languages)
+      || manifest.languages.length === 0
+      || !manifest.languages.every(isTargetLanguage)
     ) {
       throw new Error('INVALID_PACK_MANIFEST');
     }
+  }
+
+  const ids = new Set<string>();
+  for (const item of manifest.items) {
+    if (!item?.id || ids.has(item.id) || !item.image) throw new Error('INVALID_PACK_MANIFEST');
+    assertPackItemPrompts(item);
+    assertPackItemMinWords(item);
     const imagePath = normalizeArchivePath(item.image);
     if (!imagePath.startsWith('images/') || !/\.(webp|jpe?g|png)$/i.test(imagePath)) {
       throw new Error('INVALID_PACK_MANIFEST');
     }
     ids.add(item.id);
   }
+}
+
+/**
+ * Un item porte soit un bloc `prompts` (format v2, une consigne par langue de
+ * collecte), soit la consigne unique `question` du format v1. Un item sans
+ * aucune consigne exploitable invalide le manifeste : mieux vaut refuser le lot
+ * à l'installation que livrer une image muette au collecteur.
+ */
+function assertPackItemPrompts(item: ArchivePackItem) {
+  const prompts = item.prompts;
+  if (prompts !== undefined) {
+    if (!prompts || typeof prompts !== 'object' || Array.isArray(prompts)) {
+      throw new Error('INVALID_PACK_MANIFEST');
+    }
+    const entries = Object.entries(prompts);
+    if (entries.length === 0) throw new Error('INVALID_PACK_MANIFEST');
+    for (const [language, prompt] of entries) {
+      if (!isTargetLanguage(language) || typeof prompt !== 'string' || !prompt.trim()) {
+        throw new Error('INVALID_PACK_MANIFEST');
+      }
+    }
+    return;
+  }
+  if (!item.question?.trim()) throw new Error('INVALID_PACK_MANIFEST');
+}
+
+function assertPackItemMinWords(item: ArchivePackItem) {
+  const minWords = item.minWords;
+  if (Number.isInteger(minWords) && (minWords as number) >= 1) return;
+  if (minWords && typeof minWords === 'object' && !Array.isArray(minWords)) {
+    const entries = Object.entries(minWords);
+    if (entries.length === 0) throw new Error('INVALID_PACK_MANIFEST');
+    for (const [language, value] of entries) {
+      if (!isTargetLanguage(language) || !Number.isInteger(value) || (value as number) < 1) {
+        throw new Error('INVALID_PACK_MANIFEST');
+      }
+    }
+    return;
+  }
+  throw new Error('INVALID_PACK_MANIFEST');
 }
 
 async function readAssignmentFromUrl(url: string) {
@@ -235,22 +289,39 @@ function installedDirectory(manifest: AssignmentManifest, reference: AssignmentP
   );
 }
 
-function packItems(manifest: ArchivePackManifest, directory: Directory): TaskItem[] {
-  return manifest.items.map((item) => ({
-    id: item.id,
-    instruction: item.question,
-    instructionEn: item.instructionEn,
-    minWords: item.minWords,
-    imageUri: new File(directory, normalizeArchivePath(item.image)).uri,
-    credit: item.credit,
-    originPackId: manifest.packId,
-    metadata: item.metadata,
-  }));
+/**
+ * Seule la consigne de la langue de collecte est chargée en mémoire et
+ * persistée : sur un lot de plusieurs milliers d'items, conserver les trois
+ * traductions triplerait inutilement la taille de l'état sauvegardé.
+ */
+function packItems(
+  manifest: ArchivePackManifest,
+  directory: Directory,
+  language: TargetLanguage,
+): TaskItem[] {
+  return manifest.items.map((item) => {
+    const prompt = item.prompts?.[language];
+    const minWords = typeof item.minWords === 'number'
+      ? item.minWords
+      : item.minWords?.[language] ?? 1;
+    return {
+      id: item.id,
+      prompts: prompt ? { [language]: prompt } : {},
+      fallbackPrompt: item.question,
+      fallbackPromptEn: item.instructionEn,
+      minWords,
+      imageUri: new File(directory, normalizeArchivePath(item.image)).uri,
+      credit: item.credit,
+      originPackId: manifest.packId,
+      metadata: item.metadata,
+    } satisfies TaskItem;
+  });
 }
 
 function loadInstalledArchive(
   assignment: AssignmentManifest,
   reference: AssignmentPackReference,
+  language: TargetLanguage,
 ): InstalledArchive | null {
   const directory = installedDirectory(assignment, reference);
   const marker = new File(directory, '.complete');
@@ -262,7 +333,7 @@ function loadInstalledArchive(
     for (const item of parsed.items) {
       if (!new File(directory, normalizeArchivePath(item.image)).exists) return null;
     }
-    return { manifest: parsed, items: packItems(parsed, directory) };
+    return { manifest: parsed, items: packItems(parsed, directory, language) };
   } catch {
     return null;
   }
@@ -533,10 +604,23 @@ function selectedItemIds(
 function selectPackManifestItems(
   manifest: ArchivePackManifest,
   itemIds: Set<string> | null,
+  language: TargetLanguage,
 ) {
-  if (!itemIds) return manifest;
-  const items = manifest.items.filter((item) => itemIds.has(item.id));
-  if (items.length !== itemIds.size) throw new Error('ASSIGNMENT_ITEM_NOT_FOUND');
+  const selected = itemIds
+    ? manifest.items.filter((item) => itemIds.has(item.id))
+    : manifest.items;
+  if (itemIds && selected.length !== itemIds.size) throw new Error('ASSIGNMENT_ITEM_NOT_FOUND');
+
+  // Un lot qui ne contient pas la langue du collecteur est une erreur
+  // d'affectation, pas une donnée à ignorer silencieusement.
+  const items = selected.filter((item) => itemSupportsLanguage(
+    {
+      prompts: item.prompts ?? {},
+      fallbackPrompt: item.question,
+    },
+    language,
+  ));
+  if (items.length === 0) throw new Error('LANGUAGE_NOT_AVAILABLE');
   if (items.length > MAX_SELECTED_ITEMS) throw new Error('ARCHIVE_TOO_LARGE');
   return { ...manifest, items };
 }
@@ -593,60 +677,47 @@ async function downloadArchive(
   callbacks: AssignmentInstallCallbacks,
 ) {
   if (reference.sizeBytes) {
-    // The ZIP itself stays in cache while only the images selected by the
-    // assignment are extracted. Keep a conservative margin without requiring
-    // enough room to duplicate every image contained in a large source pack.
+    // Le ZIP reste en cache pendant que seules les images retenues par
+    // l'affectation sont extraites. On garde une marge prudente sans exiger de
+    // pouvoir dupliquer toutes les images d'un gros lot source.
     const required = Math.ceil(reference.sizeBytes * 1.75) + MIN_FREE_SPACE_BUFFER;
     if (Paths.availableDiskSpace < required) throw new Error('NOT_ENOUGH_SPACE');
   }
 
-  const cacheFile = new File(
-    Paths.cache,
-    `bli-${safeSegment(assignment.assignmentId)}-${safeSegment(reference.packId)}.zip`,
-  );
-  if (cacheFile.exists && reference.sizeBytes && cacheFile.size === reference.sizeBytes) {
-    callbacks.onProgress(makeProgress(
-      assignment,
-      sourceUrl,
-      installedPackIds,
-      installedBytes + cacheFile.size,
-      'downloading',
-      { currentPackId: reference.packId, phase: 'downloading', phaseProgress: 1 },
-    ));
-    return cacheFile;
-  }
-  if (cacheFile.exists) cacheFile.delete();
+  const baseName = `bli-${safeSegment(assignment.assignmentId)}-${safeSegment(reference.packId)}`;
+  const cacheFile = new File(Paths.cache, `${baseName}.zip`);
+  const stateFile = new File(Paths.cache, `${baseName}.part.json`);
 
   let lastProgressAt = 0;
-  const resumable = LegacyFileSystem.createDownloadResumable(
-    driveDownloadUrl(reference.source.shareUrl),
-    cacheFile.uri,
-    {},
-    ({ totalBytesWritten, totalBytesExpectedToWrite }) => {
+  const outcome = await downloadWithResume({
+    url: driveDownloadUrl(reference.source.shareUrl),
+    destination: cacheFile,
+    stateFile,
+    expectedBytes: reference.sizeBytes,
+    onProgress: (writtenBytes, totalBytes) => {
       const now = Date.now();
-      if (now - lastProgressAt < DOWNLOAD_PROGRESS_INTERVAL_MS && totalBytesWritten < totalBytesExpectedToWrite) return;
+      const finished = totalBytes !== undefined && writtenBytes >= totalBytes;
+      if (now - lastProgressAt < DOWNLOAD_PROGRESS_INTERVAL_MS && !finished) return;
       lastProgressAt = now;
       callbacks.onProgress(makeProgress(
         assignment,
         sourceUrl,
         installedPackIds,
-        installedBytes + totalBytesWritten,
+        installedBytes + writtenBytes,
         'downloading',
         {
           currentPackId: reference.packId,
           phase: 'downloading',
-          phaseProgress: totalBytesExpectedToWrite > 0
-            ? Math.min(1, totalBytesWritten / totalBytesExpectedToWrite)
+          phaseProgress: totalBytes && totalBytes > 0
+            ? Math.min(1, writtenBytes / totalBytes)
             : undefined,
         },
       ));
     },
-  );
-  const result = await resumable.downloadAsync();
-  if (!result || result.status < 200 || result.status >= 300 || !cacheFile.exists) {
-    throw new Error('DRIVE_DOWNLOAD_REJECTED');
-  }
-  return cacheFile;
+  });
+
+  if (!cacheFile.exists) throw new Error('DRIVE_DOWNLOAD_REJECTED');
+  return { file: cacheFile, resumedBytes: outcome.resumedFromBytes };
 }
 
 async function installArchive(
@@ -655,12 +726,13 @@ async function installArchive(
   sourceUrl: string | undefined,
   installedPackIds: string[],
   installedBytes: number,
+  language: TargetLanguage,
   callbacks: AssignmentInstallCallbacks,
 ): Promise<InstalledArchive> {
-  const cached = loadInstalledArchive(assignment, reference);
+  const cached = loadInstalledArchive(assignment, reference, language);
   if (cached) return cached;
 
-  const archive = await downloadArchive(
+  const { file: archive } = await downloadArchive(
     assignment,
     reference,
     sourceUrl,
@@ -691,6 +763,7 @@ async function installArchive(
     const parsed = selectPackManifestItems(
       indexedArchive.manifest,
       selectedItemIds(assignment, reference),
+      language,
     );
     const finalDirectory = installedDirectory(assignment, reference);
     reportPhase('extracting', 0);
@@ -714,7 +787,7 @@ async function installArchive(
     marker.create({ intermediates: true, overwrite: true });
     marker.write(JSON.stringify({ packId: parsed.packId, version: parsed.version }));
     installationComplete = true;
-    return { manifest: parsed, items: packItems(parsed, finalDirectory) };
+    return { manifest: parsed, items: packItems(parsed, finalDirectory, language) };
   } finally {
     // Keep a fully downloaded ZIP after a local installation error so a retry
     // does not consume another multi-gigabyte download. It is removed only
@@ -733,6 +806,7 @@ function buildAssignmentPack(
   assignment: AssignmentManifest,
   installed: Map<string, InstalledArchive>,
   source: TaskPack['source'],
+  language: TargetLanguage,
 ): TaskPack {
   const byPackAndItem = new Map<string, TaskItem>();
   for (const [packId, archive] of installed) {
@@ -764,6 +838,11 @@ function buildAssignmentPack(
     ids.add(item.id);
   }
 
+  const availableLanguages = new Set<TargetLanguage>();
+  for (const archive of installed.values()) {
+    languagesOf(archive.items).forEach((candidate) => availableLanguages.add(candidate));
+  }
+
   return {
     id: assignment.assignmentId,
     name: `Affectation ${assignment.assignmentId}`,
@@ -772,6 +851,8 @@ function buildAssignmentPack(
     source,
     downloadedAt: new Date().toISOString(),
     targetItems: assignment.targetItems,
+    targetLanguage: language,
+    availableLanguages: [...availableLanguages],
     items,
   };
 }
@@ -781,8 +862,12 @@ async function runAssignmentInstall(
   sourceUrl: string | undefined,
   callbacks: AssignmentInstallCallbacks,
   source: TaskPack['source'],
+  requestedLanguage: TargetLanguage,
 ) {
   assertAssignmentManifest(manifest);
+  // Une affectation peut imposer sa langue : c'est elle qui fait foi, sinon on
+  // suit la langue déclarée par le collecteur à l'identification.
+  const language = manifest.language ?? requestedLanguage;
   packsDirectory().create({ intermediates: true, idempotent: true });
   const installed = new Map<string, InstalledArchive>();
   const installedPackIds: string[] = [];
@@ -805,6 +890,7 @@ async function runAssignmentInstall(
         sourceUrl,
         installedPackIds,
         installedBytes,
+        language,
         trackedCallbacks,
       );
       installed.set(reference.packId, archive);
@@ -817,12 +903,12 @@ async function runAssignmentInstall(
         installedBytes,
         installedPackIds.length === manifest.packs.length ? 'ready' : 'downloading',
       );
-      const pack = buildAssignmentPack(manifest, installed, source);
+      const pack = buildAssignmentPack(manifest, installed, source, language);
       latestProgress = progress;
       callbacks.onPackReady(pack, progress);
     }
 
-    const finalPack = buildAssignmentPack(manifest, installed, source);
+    const finalPack = buildAssignmentPack(manifest, installed, source, language);
     const expectedAvailableItems = manifest.sequence?.length ?? manifest.targetItems;
     if (finalPack.items.length !== expectedAvailableItems) {
       throw new Error('ASSIGNMENT_ITEM_COUNT_MISMATCH');
@@ -837,12 +923,16 @@ async function runAssignmentInstall(
   }
 }
 
-export async function installAssignmentFromUrl(url: string, callbacks: AssignmentInstallCallbacks) {
+export async function installAssignmentFromUrl(
+  url: string,
+  language: TargetLanguage,
+  callbacks: AssignmentInstallCallbacks,
+) {
   if (Platform.OS === 'web') throw new Error('MOBILE_STORAGE_REQUIRED');
-  const key = url.trim();
+  const key = `${language}::${url.trim()}`;
   if (activeInstall?.key === key) return activeInstall.promise;
-  const promise = readAssignmentFromUrl(key)
-    .then((manifest) => runAssignmentInstall(manifest, key, callbacks, 'downloaded'))
+  const promise = readAssignmentFromUrl(url.trim())
+    .then((manifest) => runAssignmentInstall(manifest, url.trim(), callbacks, 'downloaded', language))
     .finally(() => {
       if (activeInstall?.key === key) activeInstall = null;
     });
@@ -850,7 +940,10 @@ export async function installAssignmentFromUrl(url: string, callbacks: Assignmen
   return promise;
 }
 
-export async function importAssignmentDocument(callbacks: AssignmentInstallCallbacks) {
+export async function importAssignmentDocument(
+  language: TargetLanguage,
+  callbacks: AssignmentInstallCallbacks,
+) {
   if (Platform.OS === 'web') throw new Error('MOBILE_STORAGE_REQUIRED');
   const result = await DocumentPicker.getDocumentAsync({
     type: ['application/json', 'text/json', 'text/plain', 'application/octet-stream'],
@@ -867,6 +960,6 @@ export async function importAssignmentDocument(callbacks: AssignmentInstallCallb
     throw new Error('INVALID_ASSIGNMENT');
   }
   assertAssignmentManifest(parsed);
-  await runAssignmentInstall(parsed, undefined, callbacks, 'imported');
+  await runAssignmentInstall(parsed, undefined, callbacks, 'imported', language);
   return true;
 }

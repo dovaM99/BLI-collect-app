@@ -1,21 +1,38 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState as ReactNativeAppState } from 'react-native';
 
-import { initialState, samplePack } from '../data/samplePack';
+import { initialState, packRecordFrom, samplePack } from '../data/samplePack';
 import { translate } from '../i18n';
 import { loadState, saveState } from '../services/storage';
+import { emptyMetrics } from '../services/storageState';
 import { getTheme } from '../theme';
+import { describeCollectorCode, normalizeCollectorCode } from '../utils/collectorCode';
 import type {
   Annotation,
+  AnnotationMetrics,
   AssignmentDownload,
   AppState,
   CollectionSession,
   Language,
+  PackRecord,
   Profile,
+  TargetLanguage,
   TaskPack,
   ThemeMode,
 } from '../types';
 
-type LoginInput = Pick<Profile, 'username' | 'firstName' | 'lastName'>;
+/** Au-delà de ce silence, on considère que la personne n'écrit plus. */
+const ACTIVE_TYPING_GAP_MS = 10_000;
+/** Ajout de caractères en un seul événement au-delà duquel on parle de collage. */
+const BURST_THRESHOLD_CHARS = 20;
+
+export type LoginInput = {
+  collectorCode: string;
+  username: string;
+  firstName: string;
+  lastName: string;
+  targetLanguage: TargetLanguage;
+};
 
 type AppContextValue = {
   hydrated: boolean;
@@ -31,6 +48,7 @@ type AppContextValue = {
   pauseSession: () => void;
   abandonCollection: () => AppState;
   setCurrentIndex: (index: number) => void;
+  noteItemShown: (taskId: string) => void;
   updateDraft: (taskId: string, text: string) => void;
   validateAnnotation: (taskId: string, text: string) => { complete: boolean };
   replacePack: (pack: TaskPack) => void;
@@ -54,31 +72,51 @@ function annotationKey(packId: string, taskId: string) {
   return `${packId}:${taskId}`;
 }
 
-function normalizeIdentityPart(value: string) {
-  return value
-    .trim()
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ');
+/**
+ * L'identité repose désormais sur le code collecteur émis par BLI, et non plus
+ * sur le triplet nom/prénom/pseudo : deux homonymes ne partagent plus le même
+ * espace de travail, et une faute de frappe dans le nom ne crée plus un profil
+ * fantôme qui « perd » la progression.
+ */
+function identityKey(input: Pick<LoginInput, 'collectorCode'>) {
+  return normalizeCollectorCode(input.collectorCode);
 }
 
-function identityKey(input: LoginInput) {
-  return [input.username, input.lastName, input.firstName].map(normalizeIdentityPart).join('|');
+function profileIdFrom(input: Pick<LoginInput, 'collectorCode'>) {
+  const code = normalizeCollectorCode(input.collectorCode).toLowerCase() || 'inconnu';
+  return `annotator-${code}`;
 }
 
-function profileIdFrom(input: LoginInput) {
-  const segment = (value: string) => normalizeIdentityPart(value)
-    .replace(/[^a-z0-9_-]+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'profil';
-  return `annotator-${segment(input.username)}-${segment(input.lastName)}-${segment(input.firstName)}`;
+function registerPack(
+  registry: Record<string, PackRecord>,
+  pack: TaskPack,
+  now: string,
+): Record<string, PackRecord> {
+  const existing = registry[pack.id];
+  // Le registre est reconstruit uniquement quand le lot change réellement :
+  // recopier des milliers d'items à chaque frappe coûterait bien plus cher que
+  // ce que le registre fait gagner.
+  if (
+    existing
+    && existing.version === pack.version
+    && existing.targetLanguage === pack.targetLanguage
+    && existing.items.length === pack.items.length
+  ) {
+    return registry;
+  }
+  const record = packRecordFrom(pack, now);
+  return {
+    ...registry,
+    [pack.id]: existing ? { ...record, firstSeenAt: existing.firstSeenAt } : record,
+  };
 }
 
 function syncActiveWorkspace(state: AppState) {
   const normalized: AppState = {
     ...state,
-    schemaVersion: 3,
+    schemaVersion: 4,
     profileWorkspaces: state.profileWorkspaces ?? {},
+    packRegistry: registerPack(state.packRegistry ?? {}, state.pack, new Date().toISOString()),
     abandonedCollections: state.abandonedCollections ?? [],
   };
   if (!normalized.profile) return normalized;
@@ -122,6 +160,7 @@ function createSession(state: AppState): CollectionSession | null {
     id: makeId('session'),
     profileId: state.profile.id,
     packId: state.pack.id,
+    language: state.pack.targetLanguage,
     startedAt: now,
     lastActiveAt: now,
     status: 'active',
@@ -130,11 +169,55 @@ function createSession(state: AppState): CollectionSession | null {
   };
 }
 
+/**
+ * Met à jour les signaux de saisie à partir de l'écart entre l'ancien et le
+ * nouveau texte. Tout est calculé ici, dans le réducteur : aucun écran n'a à
+ * instrumenter son champ de texte.
+ */
+function nextMetrics(
+  previous: AnnotationMetrics | undefined,
+  previousText: string,
+  text: string,
+  shownAt: number | undefined,
+  now: number,
+): AnnotationMetrics {
+  const base = previous ?? emptyMetrics();
+  const lastInputMs = base.lastInputAt ? Date.parse(base.lastInputAt) : Number.NaN;
+  const gap = Number.isFinite(lastInputMs) ? now - lastInputMs : Number.POSITIVE_INFINITY;
+  const delta = text.length - previousText.length;
+  const nowIso = new Date(now).toISOString();
+
+  return {
+    activeMs: base.activeMs + (gap > 0 && gap <= ACTIVE_TYPING_GAP_MS ? gap : 0),
+    timeToFirstInputMs: base.timeToFirstInputMs
+      ?? (base.firstInputAt || shownAt === undefined ? base.timeToFirstInputMs : Math.max(0, now - shownAt)),
+    editCount: base.editCount + 1,
+    charCount: text.length,
+    maxBurstChars: Math.max(base.maxBurstChars, delta > 0 ? delta : 0),
+    burstCount: base.burstCount + (delta >= BURST_THRESHOLD_CHARS ? 1 : 0),
+    deletionCount: base.deletionCount + (delta < 0 ? 1 : 0),
+    firstInputAt: base.firstInputAt ?? nowIso,
+    lastInputAt: nowIso,
+    validationCount: base.validationCount,
+  };
+}
+
 export function AppProvider({ children }: React.PropsWithChildren) {
   const [hydrated, setHydrated] = useState(false);
   const [state, setState] = useState<AppState>(initialState);
   const stateRef = useRef(state);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Horodatage d'affichage de chaque image, en mémoire seulement : sert à mesurer
+  // le délai avant la première frappe.
+  const shownAtRef = useRef<Map<string, number>>(new Map());
+
+  const flush = useCallback(() => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    void saveState(stateRef.current);
+  }, []);
 
   useEffect(() => {
     loadState().then((storedState) => {
@@ -145,10 +228,18 @@ export function AppProvider({ children }: React.PropsWithChildren) {
       setHydrated(true);
     });
     return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      void saveState(stateRef.current);
+      flush();
     };
-  }, []);
+  }, [flush]);
+
+  // Android peut tuer l'application sans préavis (mémoire, batterie, délestage).
+  // On force l'écriture dès que l'app passe en arrière-plan.
+  useEffect(() => {
+    const subscription = ReactNativeAppState.addEventListener('change', (status) => {
+      if (status !== 'active') flush();
+    });
+    return () => subscription.remove();
+  }, [flush]);
 
   const commit = useCallback((updater: (current: AppState) => AppState, saveDelay = 0) => {
     const current = syncActiveWorkspace(stateRef.current);
@@ -181,6 +272,8 @@ export function AppProvider({ children }: React.PropsWithChildren) {
       const archivedProfile = (current.abandonedCollections ?? [])
         .find((collection) => identityKey(collection.profile) === key)?.profile;
       const knownProfile = storedWorkspace?.profile ?? archivedProfile;
+      // Un profil déjà connu conserve son identifiant : on ne casse jamais le
+      // rattachement d'un travail déjà produit.
       const profileId = knownProfile?.id ?? profileIdFrom(input);
       const previousClock = current.collectionClocks[profileId];
       const collectionStartedAt = previousClock?.collectionStartedAt
@@ -189,8 +282,13 @@ export function AppProvider({ children }: React.PropsWithChildren) {
       const lastTrustedAt = previousClock?.lastTrustedAt && previousClock.lastTrustedAt > now
         ? previousClock.lastTrustedAt
         : now;
+      const status = describeCollectorCode(input.collectorCode);
       const profile: Profile = {
         id: profileId,
+        collectorCode: status.normalized,
+        collectorCodeFormat: status.format,
+        collectorCodeChecksumOk: status.checksumOk,
+        targetLanguage: input.targetLanguage,
         username: input.username.trim(),
         firstName: input.firstName.trim(),
         lastName: input.lastName.trim(),
@@ -203,9 +301,15 @@ export function AppProvider({ children }: React.PropsWithChildren) {
           ? { ...session, status: 'paused' as const, lastActiveAt: now }
           : session,
       );
+      // Le lot de démonstration suit la langue du collecteur ; un lot téléchargé
+      // garde la langue avec laquelle il a été installé.
+      const pack = current.pack.source === 'bundled'
+        ? { ...current.pack, targetLanguage: input.targetLanguage }
+        : current.pack;
       return {
         ...current,
         profile,
+        pack,
         collectionClocks: {
           ...current.collectionClocks,
           [profileId]: { collectionStartedAt, lastTrustedAt },
@@ -257,6 +361,7 @@ export function AppProvider({ children }: React.PropsWithChildren) {
               name: current.pack.name,
               version: current.pack.version,
               targetItems: current.pack.items.length,
+              targetLanguage: current.pack.targetLanguage,
             },
             sessions: collectionSessions,
             annotations: collectionAnnotations,
@@ -383,6 +488,11 @@ export function AppProvider({ children }: React.PropsWithChildren) {
     });
   }, [commit]);
 
+  const noteItemShown = useCallback((taskId: string) => {
+    const key = `${stateRef.current.pack.id}:${taskId}`;
+    if (!shownAtRef.current.has(key)) shownAtRef.current.set(key, Date.now());
+  }, []);
+
   const updateDraft = useCallback((taskId: string, text: string) => {
     commit((currentState) => {
       let current = currentState;
@@ -397,15 +507,24 @@ export function AppProvider({ children }: React.PropsWithChildren) {
       const key = annotationKey(current.pack.id, taskId);
       const existing = current.annotations[key];
       if (existing?.text === text && existing.status === 'draft') return current;
-      const now = new Date().toISOString();
+      const nowMs = Date.now();
+      const now = new Date(nowMs).toISOString();
       const annotation: Annotation = {
         taskId,
         packId: current.pack.id,
         sessionId,
+        language: current.pack.targetLanguage,
         text,
         wordCount: countWords(text),
         status: 'draft',
         updatedAt: now,
+        metrics: nextMetrics(
+          existing?.metrics,
+          existing?.text ?? '',
+          text,
+          shownAtRef.current.get(key),
+          nowMs,
+        ),
       };
       return {
         ...current,
@@ -439,15 +558,24 @@ export function AppProvider({ children }: React.PropsWithChildren) {
 
       const now = new Date().toISOString();
       const key = annotationKey(current.pack.id, taskId);
+      const existing = current.annotations[key];
+      const trimmed = text.trim();
+      const previousMetrics = existing?.metrics ?? emptyMetrics();
       const annotation: Annotation = {
         taskId,
         packId: current.pack.id,
         sessionId,
-        text: text.trim(),
-        wordCount: countWords(text),
+        language: current.pack.targetLanguage,
+        text: trimmed,
+        wordCount: countWords(trimmed),
         status: 'validated',
         updatedAt: now,
         validatedAt: now,
+        metrics: {
+          ...previousMetrics,
+          charCount: trimmed.length,
+          validationCount: previousMetrics.validationCount + 1,
+        },
       };
       const annotations = { ...current.annotations, [key]: annotation };
       const allDownloadedItemsValidated = current.pack.items.every(
@@ -482,6 +610,7 @@ export function AppProvider({ children }: React.PropsWithChildren) {
     commit((current) => ({
       ...current,
       pack,
+      packRegistry: registerPack(current.packRegistry, pack, new Date().toISOString()),
       assignment: null,
       sessions: current.sessions.map((session) =>
         session.id === current.activeSessionId
@@ -498,19 +627,22 @@ export function AppProvider({ children }: React.PropsWithChildren) {
         return { ...current, assignment };
       }
       const now = new Date().toISOString();
+      const pack: TaskPack = {
+        id: assignment.id,
+        name: `Affectation ${assignment.id}`,
+        nameEn: `Assignment ${assignment.id}`,
+        version: assignment.version,
+        source: 'downloaded',
+        downloadedAt: now,
+        targetItems: assignment.targetItems,
+        targetLanguage: current.profile?.targetLanguage ?? current.pack.targetLanguage,
+        items: [],
+      };
       return {
         ...current,
         assignment,
-        pack: {
-          id: assignment.id,
-          name: `Affectation ${assignment.id}`,
-          nameEn: `Assignment ${assignment.id}`,
-          version: assignment.version,
-          source: 'downloaded',
-          downloadedAt: now,
-          targetItems: assignment.targetItems,
-          items: [],
-        },
+        pack,
+        packRegistry: registerPack(current.packRegistry, pack, now),
         sessions: current.sessions.map((session) =>
           session.id === current.activeSessionId
             ? { ...session, status: 'paused' as const, lastActiveAt: now }
@@ -523,12 +655,14 @@ export function AppProvider({ children }: React.PropsWithChildren) {
 
   const applyAssignmentPack = useCallback((pack: TaskPack, assignment: AssignmentDownload) => {
     commit((current) => {
+      const now = new Date().toISOString();
+      const packRegistry = registerPack(current.packRegistry, pack, now);
       const sameAssignment = current.pack.id === pack.id;
       if (!sameAssignment) {
-        const now = new Date().toISOString();
         return {
           ...current,
           pack,
+          packRegistry,
           assignment,
           sessions: current.sessions.map((session) =>
             session.id === current.activeSessionId
@@ -545,6 +679,7 @@ export function AppProvider({ children }: React.PropsWithChildren) {
       return {
         ...current,
         pack,
+        packRegistry,
         assignment,
         sessions: current.sessions.map((session) => {
           if (session.id !== current.activeSessionId || session.packId !== pack.id) return session;
@@ -559,7 +694,10 @@ export function AppProvider({ children }: React.PropsWithChildren) {
     });
   }, [commit]);
 
-  const useSamplePack = useCallback(() => replacePack(samplePack), [replacePack]);
+  const useSamplePack = useCallback(() => {
+    const language = stateRef.current.profile?.targetLanguage ?? samplePack.targetLanguage;
+    replacePack({ ...samplePack, targetLanguage: language });
+  }, [replacePack]);
 
   const value = useMemo<AppContextValue>(() => ({
     hydrated,
@@ -575,6 +713,7 @@ export function AppProvider({ children }: React.PropsWithChildren) {
     pauseSession,
     abandonCollection,
     setCurrentIndex,
+    noteItemShown,
     updateDraft,
     validateAnnotation,
     replacePack,
@@ -594,6 +733,7 @@ export function AppProvider({ children }: React.PropsWithChildren) {
     pauseSession,
     abandonCollection,
     setCurrentIndex,
+    noteItemShown,
     updateDraft,
     validateAnnotation,
     replacePack,

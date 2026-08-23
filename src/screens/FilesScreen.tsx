@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Card } from '../components/Card';
@@ -7,7 +7,7 @@ import { IconTile } from '../components/IconTile';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { Screen } from '../components/Screen';
 import { installAssignmentFromUrl, importAssignmentDocument } from '../services/assignmentFiles';
-import { countExportAnnotations, writeAndShareExport } from '../services/dataFiles';
+import { countExportAnnotations, listExportFiles, writeAndShareExport } from '../services/dataFiles';
 import { useApp } from '../state/AppContext';
 import { colors } from '../theme';
 
@@ -25,6 +25,15 @@ export function FilesScreen() {
   const [busy, setBusy] = useState<'download' | 'import' | 'export' | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [exportFileCount, setExportFileCount] = useState<number | null>(null);
+
+  const targetLanguage = state.profile?.targetLanguage ?? state.pack.targetLanguage;
+
+  const refreshExportFiles = useCallback(() => {
+    void listExportFiles().then((files) => setExportFileCount(files.length));
+  }, []);
+
+  useEffect(refreshExportFiles, [refreshExportFiles]);
 
   const begin = () => {
     setMessage(null);
@@ -50,6 +59,12 @@ export function FilesScreen() {
     if (code === 'CHECKSUM_MISMATCH') return t('checksumMismatch');
     if (code === 'NOT_ENOUGH_SPACE') return t('notEnoughSpace');
     if (code === 'MOBILE_STORAGE_REQUIRED') return t('mobileStorageRequired');
+    if (code === 'LANGUAGE_NOT_AVAILABLE') return t('languageNotAvailable');
+    if (code === 'DRIVE_QUOTA_EXCEEDED') return t('driveQuotaExceeded');
+    if (code === 'DRIVE_ACCESS_DENIED') return t('driveAccessDenied');
+    if (code === 'DOWNLOAD_RATE_LIMITED') return t('downloadRateLimited');
+    if (code === 'NETWORK_UNAVAILABLE') return t('networkUnavailable');
+    if (code === 'DOWNLOAD_INCOMPLETE') return t('downloadIncomplete');
     if (code === 'DRIVE_DOWNLOAD_REJECTED' || code.startsWith('HTTP_')) return t('driveDownloadError');
     return t('genericError');
   };
@@ -63,7 +78,7 @@ export function FilesScreen() {
     }
     setBusy('download');
     try {
-      await installAssignmentFromUrl(sourceUrl, installCallbacks());
+      await installAssignmentFromUrl(sourceUrl, targetLanguage, installCallbacks());
       setMessage(t('assignmentReady'));
     } catch (caught) {
       setError(errorMessage(caught));
@@ -76,7 +91,7 @@ export function FilesScreen() {
     begin();
     setBusy('import');
     try {
-      const imported = await importAssignmentDocument(installCallbacks());
+      const imported = await importAssignmentDocument(targetLanguage, installCallbacks());
       if (imported) setMessage(t('assignmentReady'));
     } catch (caught) {
       setError(errorMessage(caught));
@@ -90,6 +105,7 @@ export function FilesScreen() {
     setBusy('export');
     try {
       const result = await writeAndShareExport(snapshot());
+      refreshExportFiles();
       if (!result.canShare) Alert.alert(t('exports'), `${t('noExport')}\n${result.fileUri}`);
       else setMessage(t('savedLocally'));
     } catch {
@@ -241,6 +257,11 @@ export function FilesScreen() {
           <Text style={[styles.exportCountNumber, { color: theme.text }]}>{annotationCount}</Text>
           <Text style={[styles.exportCountLabel, { color: theme.muted }]}>{t('exportCurrentLabel')}</Text>
         </View>
+        {exportFileCount !== null ? (
+          <Text style={[styles.exportFiles, { color: theme.muted }]}>
+            {t('exportFilesOnDevice', { count: exportFileCount })}
+          </Text>
+        ) : null}
         <PrimaryButton
           compact
           icon="share-outline"
@@ -307,6 +328,7 @@ const styles = StyleSheet.create({
   exportCount: { flexDirection: 'row', alignItems: 'baseline', gap: 8, borderRadius: 15, padding: 14, marginTop: 16 },
   exportCountNumber: { fontSize: 24, fontWeight: '900' },
   exportCountLabel: { flex: 1, fontSize: 12, fontWeight: '600' },
+  exportFiles: { fontSize: 11, marginTop: 9, marginLeft: 4 },
   feedback: { flexDirection: 'row', gap: 9, alignItems: 'center', borderRadius: 16, padding: 14, marginBottom: 14 },
   successText: { flex: 1, fontSize: 13, fontWeight: '700' },
   errorText: { flex: 1, color: colors.red, fontSize: 13, fontWeight: '700' },
