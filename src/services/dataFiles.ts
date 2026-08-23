@@ -80,9 +80,42 @@ function fallbackRecord(packId: string, annotations: Annotation[]): PackRecord {
   };
 }
 
+type LanguageBucket = {
+  language: TargetLanguage;
+  annotations: Annotation[];
+  sessions: CollectionSession[];
+};
+
+/**
+ * Un bloc d'export ne couvre qu'une seule langue de collecte.
+ *
+ * Regrouper par lot seulement produisait des blocs mensongers : un en-tête
+ * déclaré kikongo pouvait contenir une réponse en lingala, parce qu'un même
+ * collecteur avait travaillé le lot dans deux langues. Le dépouillement lisait
+ * alors la langue de l'en-tête au lieu de celle de l'annotation.
+ */
+function splitByLanguage(
+  annotations: Annotation[],
+  sessions: CollectionSession[],
+  fallback: TargetLanguage,
+  ensure?: TargetLanguage,
+): LanguageBucket[] {
+  const languages = new Set<TargetLanguage>();
+  annotations.forEach((annotation) => languages.add(annotation.language));
+  sessions.forEach((session) => languages.add(session.language));
+  if (ensure) languages.add(ensure);
+  if (languages.size === 0) languages.add(fallback);
+  return [...languages].sort().map((language) => ({
+    language,
+    annotations: annotations.filter((annotation) => annotation.language === language),
+    sessions: sessions.filter((session) => session.language === language),
+  }));
+}
+
 function collectionFor(
   kind: CompactCollectionExport['kind'],
   record: PackRecord,
+  language: TargetLanguage,
   sessions: CollectionSession[],
   annotations: Annotation[],
   abandonedAt?: string,
@@ -100,7 +133,7 @@ function collectionFor(
       name: record.name,
       version: record.version,
       targetItems: record.targetItems,
-      targetLanguage: record.targetLanguage,
+      targetLanguage: language,
       availableLanguages: record.availableLanguages,
     },
     sessions: sessions.map((session) => ({
@@ -115,7 +148,7 @@ function collectionFor(
   };
 }
 
-function abandonedCollectionExport(collection: AbandonedCollection): CompactCollectionExport {
+function abandonedCollectionExports(collection: AbandonedCollection): CompactCollectionExport[] {
   const record: PackRecord = {
     id: collection.pack.id,
     name: collection.pack.name,
@@ -132,7 +165,15 @@ function abandonedCollectionExport(collection: AbandonedCollection): CompactColl
       metadata: item.metadata,
     })),
   };
-  return collectionFor('abandoned', record, collection.sessions, collection.annotations, collection.abandonedAt);
+  return splitByLanguage(collection.annotations, collection.sessions, collection.pack.targetLanguage)
+    .map((bucket) => collectionFor(
+      'abandoned',
+      record,
+      bucket.language,
+      bucket.sessions,
+      bucket.annotations,
+      collection.abandonedAt,
+    ));
 }
 
 function collectorOf(profile: Profile, state: AppState) {
@@ -197,14 +238,29 @@ export function buildExportPayload(state: AppState): CompactExportPayload {
       const record = state.packRegistry[packId] ?? fallbackRecord(packId, annotations);
       const sessions = state.sessions.filter((session) => session.packId === packId);
       if (packId !== state.pack.id && annotations.length === 0 && sessions.length === 0) return;
-      collections.push(
-        collectionFor(packId === state.pack.id ? 'current' : 'previous', record, sessions, annotations),
-      );
+      const active = packId === state.pack.id;
+      splitByLanguage(
+        annotations,
+        sessions,
+        record.targetLanguage,
+        active ? state.pack.targetLanguage : undefined,
+      ).forEach((bucket) => {
+        // « current » désigne le couple lot + langue réellement en cours ; un
+        // même lot travaillé auparavant dans une autre langue reste « previous ».
+        const isCurrent = active && bucket.language === state.pack.targetLanguage;
+        collections.push(collectionFor(
+          isCurrent ? 'current' : 'previous',
+          record,
+          bucket.language,
+          bucket.sessions,
+          bucket.annotations,
+        ));
+      });
     });
   }
 
   (state.abandonedCollections ?? []).forEach((collection) => {
-    collections.push(abandonedCollectionExport(collection));
+    collections.push(...abandonedCollectionExports(collection));
   });
 
   return {
