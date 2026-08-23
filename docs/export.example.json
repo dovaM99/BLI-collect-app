@@ -1,0 +1,98 @@
+{
+  "v": 4,
+  "app": "BLI Collect",
+  "at": "2026-08-22T18:40:12.004Z",
+  "build": {
+    "appVersion": "0.1.0",
+    "slug": "bli-collect",
+    "platform": "android",
+    "osVersion": "13",
+    "deviceModel": "TECNO KG5j",
+    "deviceBrand": "TECNO",
+    "reactNative": "0.81.5",
+    "installationId": "inst-m1x2y3-a1b2c3d4e5f6"
+  },
+  "collector": {
+    "id": "annotator-blikg0042j",
+    "code": "BLIKG0042J",
+    "codeFormat": "bli",
+    "codeChecksumOk": true,
+    "username": "mbemba.j",
+    "firstName": "Joseph",
+    "lastName": "Mbemba",
+    "targetLanguage": "kg",
+    "collectionStartedAt": "2026-08-01T07:12:00.000Z",
+    "clockTrustedAt": "2026-08-22T18:40:12.004Z"
+  },
+  "collections": [
+    {
+      "kind": "current",
+      "pack": {
+        "id": "assignment_0002",
+        "name": "Affectation assignment_0002",
+        "version": "1",
+        "targetItems": 400,
+        "targetLanguage": "kg",
+        "availableLanguages": ["kg"]
+      },
+      "sessions": [
+        {
+          "id": "session-m1x2y3-aa11bb",
+          "start": "2026-08-22T06:02:11.000Z",
+          "status": "active",
+          "currentIndex": 37,
+          "language": "kg"
+        }
+      ],
+      "annotations": [
+        {
+          "id": "kikongo_pack_0003_item_0000",
+          "session": "session-m1x2y3-aa11bb",
+          "language": "kg",
+          "text": "Nkento mosi ke teka mbizi na zandu...",
+          "words": 18,
+          "status": "validated",
+          "updated": "2026-08-22T06:04:48.000Z",
+          "validated": "2026-08-22T06:04:48.000Z",
+          "originPackId": "kikongo_pack_0003",
+          "metadata": { "source": "production", "famille": "marche" },
+          "metrics": {
+            "activeMs": 94200,
+            "timeToFirstInputMs": 6100,
+            "editCount": 143,
+            "charCount": 118,
+            "maxBurstChars": 3,
+            "burstCount": 0,
+            "deletionCount": 11,
+            "firstInputAt": "2026-08-22T06:03:12.000Z",
+            "lastInputAt": "2026-08-22T06:04:46.000Z",
+            "validationCount": 1
+          }
+        }
+      ]
+    },
+    {
+      "kind": "previous",
+      "pack": {
+        "id": "assignment_0001",
+        "name": "Affectation assignment_0001",
+        "version": "1",
+        "targetItems": 400,
+        "targetLanguage": "kg"
+      },
+      "sessions": [],
+      "annotations": []
+    }
+  ],
+  "totals": {
+    "collections": 2,
+    "annotations": 1,
+    "validated": 1,
+    "words": 18
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "value": "REMPLACE_PAR_LE_SHA256_REEL_DU_CORPS_SERIALISE",
+    "bodyBytes": 2048
+  }
+}

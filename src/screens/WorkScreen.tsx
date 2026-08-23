@@ -18,6 +18,7 @@ import { Screen } from '../components/Screen';
 import { writeExportFile } from '../services/dataFiles';
 import { useApp } from '../state/AppContext';
 import { colors } from '../theme';
+import { resolveMinWords, resolvePrompt, TARGET_LANGUAGE_LABELS } from '../utils/targetLanguages';
 
 type Props = {
   onLeave: () => void;
@@ -31,6 +32,7 @@ function countWords(text: string) {
 export function WorkScreen({ onLeave, onFiles }: Props) {
   const {
     ensureSession,
+    noteItemShown,
     setCurrentIndex,
     state,
     snapshot,
@@ -81,6 +83,12 @@ export function WorkScreen({ onLeave, onFiles }: Props) {
   const session = state.sessions.find((candidate) => candidate.id === state.activeSessionId);
   const currentIndex = session?.currentIndex ?? 0;
   const item = state.pack.items[currentIndex] ?? state.pack.items[0];
+  const itemId = item?.id;
+
+  // Repère de départ pour mesurer le délai avant la première frappe.
+  useEffect(() => {
+    if (itemId) noteItemShown(itemId);
+  }, [itemId, noteItemShown]);
 
   if (!item) {
     return (
@@ -94,9 +102,12 @@ export function WorkScreen({ onLeave, onFiles }: Props) {
   const annotation = state.annotations[`${state.pack.id}:${item.id}`];
   const value = annotation?.text ?? '';
   const words = countWords(value);
-  const validLength = words >= item.minWords;
   const imageSource = item.imageUri ? { uri: item.imageUri } : item.bundledImage;
   const progress = ((currentIndex + 1) / state.pack.items.length) * 100;
+  const workingLanguage = state.pack.targetLanguage;
+  const prompt = resolvePrompt(item, workingLanguage, state.preferences.language);
+  const minWords = resolveMinWords(item, workingLanguage);
+  const validLength = words >= minWords;
 
   const goTo = (index: number) => {
     setAttempted(false);
@@ -184,12 +195,16 @@ export function WorkScreen({ onLeave, onFiles }: Props) {
         <IconTile backgroundColor={theme.blueSoft} color={theme.info} name="document-text-outline" />
         <View style={styles.instructionText}>
           <Text style={[styles.sectionTitle, { color: theme.text }]}>{t('instruction')}</Text>
-          <Text style={[styles.instruction, { color: theme.muted }]}>
-            {state.preferences.language === 'en' ? item.instructionEn ?? item.instruction : item.instruction}
-          </Text>
+          <Text style={[styles.instruction, { color: theme.muted }]}>{prompt}</Text>
+          <View style={[styles.languagePill, { backgroundColor: theme.blueSoft }]}>
+            <Ionicons color={theme.info} name="chatbubbles-outline" size={15} />
+            <Text style={[styles.languagePillText, { color: theme.info }]}>
+              {t('writeIn', { language: TARGET_LANGUAGE_LABELS[workingLanguage] })}
+            </Text>
+          </View>
           <View style={[styles.minimumPill, { backgroundColor: theme.orangeSoft }]}>
             <Ionicons color={theme.warning} name="flag-outline" size={15} />
-            <Text style={[styles.minimumText, { color: theme.warning }]}>{t('minimum')} : {item.minWords} {t('words')}</Text>
+            <Text style={[styles.minimumText, { color: theme.warning }]}>{t('minimum')} : {minWords} {t('words')}</Text>
           </View>
         </View>
       </Card>
@@ -227,11 +242,11 @@ export function WorkScreen({ onLeave, onFiles }: Props) {
         <View style={styles.counterRow}>
           <Text style={[styles.rewrite, { color: theme.muted }]}>{t('rewriteHint')}</Text>
           <Text style={[styles.counter, { color: validLength ? theme.success : attempted ? colors.red : theme.warning }]}>
-            {words} / {item.minWords} {t('words')}
+            {words} / {minWords} {t('words')}
           </Text>
         </View>
         {attempted && !validLength ? (
-          <Text style={styles.validationError}>{t('missingWords', { count: item.minWords - words })}</Text>
+          <Text style={styles.validationError}>{t('missingWords', { count: minWords - words })}</Text>
         ) : null}
       </Card>
 
@@ -347,6 +362,17 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   minimumText: { fontSize: 12, fontWeight: '800' },
+  languagePill: {
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  languagePillText: { fontSize: 12, fontWeight: '800' },
   textCard: { marginTop: 16 },
   textTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   textTitleContent: { flex: 1 },

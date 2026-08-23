@@ -8,6 +8,8 @@ import { writeExportFile } from '../services/dataFiles';
 import { useApp } from '../state/AppContext';
 import { colors } from '../theme';
 import { Screen } from '../components/Screen';
+import { formatCollectorCode } from '../utils/collectorCode';
+import { TARGET_LANGUAGE_LABELS } from '../utils/targetLanguages';
 import type { ThemeMode } from '../types';
 
 type Props = {
@@ -49,6 +51,33 @@ export function SettingsScreen({ onFiles }: Props) {
         <IconTile backgroundColor={theme.blueSoft} color={colors.navy} name="settings-outline" size={28} />
         <Text style={[styles.title, { color: theme.text }]}>{t('settings')}</Text>
       </View>
+
+      {state.profile ? (
+        <Card style={styles.card}>
+          <View style={styles.cardHeading}>
+            <IconTile backgroundColor={theme.successSoft} color={theme.success} name="person-circle-outline" />
+            <View style={styles.headingText}>
+              <Text style={[styles.cardTitle, { color: theme.text }]}>{t('collectorIdentity')}</Text>
+              <Text style={[styles.cardBody, { color: theme.muted }]}>{t('collectorIdentityBody')}</Text>
+            </View>
+          </View>
+          <View style={[styles.packInfo, { backgroundColor: theme.faint }]}>
+            <View style={styles.packText}>
+              <Text style={[styles.packName, { color: theme.text }]}>
+                {formatCollectorCode(state.profile.collectorCode)}
+              </Text>
+              <Text style={[styles.packMeta, { color: theme.muted }]}>
+                {t('targetLanguage')} : {TARGET_LANGUAGE_LABELS[state.profile.targetLanguage]}
+              </Text>
+            </View>
+            <Ionicons
+              color={state.profile.collectorCodeChecksumOk === false ? colors.red : theme.success}
+              name={state.profile.collectorCodeChecksumOk === false ? 'alert-circle' : 'shield-checkmark'}
+              size={24}
+            />
+          </View>
+        </Card>
+      ) : null}
 
       <Card style={styles.card}>
         <View style={styles.cardHeading}>
@@ -102,7 +131,7 @@ export function SettingsScreen({ onFiles }: Props) {
           <View style={styles.packText}>
             <Text numberOfLines={1} style={[styles.packName, { color: theme.text }]}>{packName}</Text>
             <Text style={[styles.packMeta, { color: theme.muted }]}> 
-              {state.pack.items.length} {t('items')} · v{state.pack.version}
+              {state.pack.items.length} {t('items')} · v{state.pack.version} · {TARGET_LANGUAGE_LABELS[state.pack.targetLanguage]}
             </Text>
           </View>
           <Ionicons color={theme.success} name="checkmark-circle" size={24} />
