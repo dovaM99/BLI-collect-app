@@ -1,4 +1,5 @@
 import { initialState, packRecordFrom, samplePack } from '../data/samplePack';
+import { annotationKeyOf } from '../utils/annotationKey';
 import { createInstallationId } from '../utils/appInfo';
 import { describeCollectorCode, normalizeCollectorCode } from '../utils/collectorCode';
 import { normalizeTargetLanguage } from '../utils/targetLanguages';
@@ -154,15 +155,21 @@ function normalizeAnnotation(value: unknown, fallbackLanguage: TargetLanguage): 
   };
 }
 
+/**
+ * Les clés sont recalculées depuis le contenu de chaque annotation, jamais
+ * reprises telles quelles. C'est ce qui migre les anciennes clés `lot:item`
+ * vers `lot:langue:item` sans étape de migration dédiée, et ce qui garantit
+ * qu'une clé ne peut pas diverger de l'annotation qu'elle désigne.
+ */
 function normalizeAnnotations(
   value: unknown,
   languageOfPack: (packId: string) => TargetLanguage,
 ): Record<string, Annotation> {
   const result: Record<string, Annotation> = {};
-  Object.entries((value ?? {}) as Record<string, unknown>).forEach(([key, candidate]) => {
+  Object.values((value ?? {}) as Record<string, unknown>).forEach((candidate) => {
     const packId = (candidate as Partial<Annotation>)?.packId ?? '';
     const annotation = normalizeAnnotation(candidate, languageOfPack(packId));
-    if (annotation) result[key] = annotation;
+    if (annotation) result[annotationKeyOf(annotation)] = annotation;
   });
   return result;
 }

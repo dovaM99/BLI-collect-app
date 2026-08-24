@@ -18,6 +18,7 @@ import { Screen } from '../components/Screen';
 import { writeExportFile } from '../services/dataFiles';
 import { useApp } from '../state/AppContext';
 import { colors } from '../theme';
+import { annotationKey } from '../utils/annotationKey';
 import { resolveMinWords, resolvePrompt, TARGET_LANGUAGE_LABELS } from '../utils/targetLanguages';
 
 type Props = {
@@ -51,7 +52,9 @@ export function WorkScreen({ onLeave, onFiles }: Props) {
     const session = ensureSession();
     if (!session || session.currentIndex !== 0) return;
     const firstIncomplete = state.pack.items.findIndex((candidate) => {
-      const annotation = state.annotations[`${state.pack.id}:${candidate.id}`];
+      const annotation = state.annotations[
+        annotationKey(state.pack.id, state.pack.targetLanguage, candidate.id)
+      ];
       return annotation?.status !== 'validated';
     });
     if (firstIncomplete > 0) setCurrentIndex(firstIncomplete);
@@ -65,9 +68,10 @@ export function WorkScreen({ onLeave, onFiles }: Props) {
     previousItemCount.current = state.pack.items.length;
     const activeSession = state.sessions.find((candidate) => candidate.id === state.activeSessionId);
     const currentItem = state.pack.items[activeSession?.currentIndex ?? 0];
-    if (!currentItem || state.annotations[`${state.pack.id}:${currentItem.id}`]?.status !== 'validated') return;
+    const key = (taskId: string) => annotationKey(state.pack.id, state.pack.targetLanguage, taskId);
+    if (!currentItem || state.annotations[key(currentItem.id)]?.status !== 'validated') return;
     const nextIncomplete = state.pack.items.findIndex(
-      (candidate) => state.annotations[`${state.pack.id}:${candidate.id}`]?.status !== 'validated',
+      (candidate) => state.annotations[key(candidate.id)]?.status !== 'validated',
     );
     if (nextIncomplete >= 0) setCurrentIndex(nextIncomplete);
   }, [setCurrentIndex, state.activeSessionId, state.annotations, state.pack.id, state.pack.items, state.sessions]);
@@ -99,7 +103,9 @@ export function WorkScreen({ onLeave, onFiles }: Props) {
     );
   }
 
-  const annotation = state.annotations[`${state.pack.id}:${item.id}`];
+  const annotation = state.annotations[
+    annotationKey(state.pack.id, state.pack.targetLanguage, item.id)
+  ];
   const value = annotation?.text ?? '';
   const words = countWords(value);
   const imageSource = item.imageUri ? { uri: item.imageUri } : item.bundledImage;
@@ -132,7 +138,9 @@ export function WorkScreen({ onLeave, onFiles }: Props) {
 
     const nextIncomplete = state.pack.items.findIndex((candidate, index) => {
       if (index <= currentIndex) return false;
-      return state.annotations[`${state.pack.id}:${candidate.id}`]?.status !== 'validated';
+      return state.annotations[
+        annotationKey(state.pack.id, state.pack.targetLanguage, candidate.id)
+      ]?.status !== 'validated';
     });
     if (nextIncomplete >= 0) goTo(nextIncomplete);
     else if (currentIndex < state.pack.items.length - 1) goTo(currentIndex + 1);

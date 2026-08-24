@@ -6,6 +6,7 @@ import { translate } from '../i18n';
 import { loadState, saveState } from '../services/storage';
 import { emptyMetrics } from '../services/storageState';
 import { getTheme } from '../theme';
+import { annotationKey } from '../utils/annotationKey';
 import { describeCollectorCode, normalizeCollectorCode } from '../utils/collectorCode';
 import type {
   Annotation,
@@ -66,10 +67,6 @@ function makeId(prefix: string) {
 
 function countWords(text: string) {
   return text.trim() ? text.trim().split(/\s+/u).length : 0;
-}
-
-function annotationKey(packId: string, taskId: string) {
-  return `${packId}:${taskId}`;
 }
 
 /**
@@ -489,8 +486,14 @@ export function AppProvider({ children }: React.PropsWithChildren) {
   }, [commit]);
 
   const noteItemShown = useCallback((taskId: string) => {
-    const key = `${stateRef.current.pack.id}:${taskId}`;
-    if (!shownAtRef.current.has(key)) shownAtRef.current.set(key, Date.now());
+    // Ecrase a chaque affichage. Conserver le tout premier faisait mesurer le
+    // temps ecoule depuis l'ouverture initiale de l'app, pas depuis la
+    // presentation qui a reellement precede la frappe.
+    const current = stateRef.current;
+    shownAtRef.current.set(
+      annotationKey(current.pack.id, current.pack.targetLanguage, taskId),
+      Date.now(),
+    );
   }, []);
 
   const updateDraft = useCallback((taskId: string, text: string) => {
@@ -504,7 +507,7 @@ export function AppProvider({ children }: React.PropsWithChildren) {
         current = { ...current, sessions: [...current.sessions, session], activeSessionId: session.id };
       }
 
-      const key = annotationKey(current.pack.id, taskId);
+      const key = annotationKey(current.pack.id, current.pack.targetLanguage, taskId);
       const existing = current.annotations[key];
       if (existing?.text === text && existing.status === 'draft') return current;
       const nowMs = Date.now();
@@ -557,7 +560,7 @@ export function AppProvider({ children }: React.PropsWithChildren) {
       }
 
       const now = new Date().toISOString();
-      const key = annotationKey(current.pack.id, taskId);
+      const key = annotationKey(current.pack.id, current.pack.targetLanguage, taskId);
       const existing = current.annotations[key];
       const trimmed = text.trim();
       const previousMetrics = existing?.metrics ?? emptyMetrics();
@@ -579,7 +582,8 @@ export function AppProvider({ children }: React.PropsWithChildren) {
       };
       const annotations = { ...current.annotations, [key]: annotation };
       const allDownloadedItemsValidated = current.pack.items.every(
-        (item) => annotations[annotationKey(current.pack.id, item.id)]?.status === 'validated',
+        (item) => annotations[annotationKey(current.pack.id, current.pack.targetLanguage, item.id)]
+          ?.status === 'validated',
       );
       const assignmentFullyInstalled = !current.assignment
         || current.assignment.status === 'ready';

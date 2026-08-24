@@ -33,6 +33,8 @@ Un manifeste de lot en v2 porte les trois traductions de chaque consigne. À l�
 
 Une affectation peut déclarer `"language"` : elle fait alors autorité sur le choix du collecteur, ce qui évite qu’un lot kikongo soit rempli en lingala.
 
+La langue fait partie de la clé d’une annotation (`lot:langue:item`). Un même item peut donc être répondu dans plusieurs langues sans que la seconde réponse écrase la première — c’est ce qui rend possible le corpus parallèle sur un même jeu d’images.
+
 ## Formats des données
 
 Chaque ZIP contient `manifest.json` à sa racine et un dossier `images/`. Le format v2 est décrit dans `docs/pack-manifest.example.json` ; le format v1 (`question` + `minWords` numérique) reste accepté pour les lots déjà distribués.
@@ -62,10 +64,10 @@ Le fichier produit est nommé `bli_<code>_<langue>_<lot>_<horodatage>.json` et s
 
 Points essentiels pour le dépouillement :
 
-- **`collections[]`** — un bloc par lot travaillé sur l’appareil, avec `kind` valant `current` (lot actif), `previous` (lot précédent, déjà remplacé) ou `abandoned`. C’est la correction majeure de la v4 : jusqu’en v3, seul le lot actif sortait, et les annotations d’un lot terminé disparaissaient dès le téléchargement du lot suivant.
+- **`collections[]`** — un bloc par couple **lot + langue de collecte**, avec `kind` valant `current` (le couple en cours), `previous` (déjà travaillé, remplacé depuis) ou `abandoned`. C’est la correction majeure de la v4 : jusqu’en v3, seul le lot actif sortait, et les annotations d’un lot terminé disparaissaient dès le téléchargement du lot suivant. Le découpage par langue garantit que `pack.targetLanguage` décrit réellement le contenu du bloc — sans lui, un lot travaillé successivement en deux langues produisait un en-tête qui contredisait ses propres annotations.
 - **`build`** — version de l’app, plateforme, modèle d’appareil et identifiant d’installation. Permet d’isoler les exports produits par un build défectueux.
 - **`collector`** — code collecteur, format et résultat du contrôle de cohérence (`codeChecksumOk`).
-- **`metrics`** par annotation — temps de frappe actif, délai avant la première frappe, nombre d’éditions, plus gros ajout en un seul événement (`maxBurstChars`, signature d’un collage), suppressions. Un texte de 120 caractères avec `maxBurstChars: 118` et `activeMs: 900` n’a pas été écrit à la main.
+- **`metrics`** par annotation — temps de frappe actif, délai entre l’affichage de l’image et la première frappe (réarmé à chaque présentation, pas au premier affichage de la session), nombre d’éditions, plus gros ajout en un seul événement (`maxBurstChars`, signature d’un collage), suppressions. Un texte de 120 caractères avec `maxBurstChars: 118` et `activeMs: 900` n’a pas été écrit à la main.
 - **`integrity`** — SHA-256 et taille du corps sérialisé, pour détecter une troncature après un transfert WhatsApp.
 
 Vérification du sceau côté dépouillement :
