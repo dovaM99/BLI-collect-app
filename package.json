@@ -9,7 +9,9 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npx expo export --platform web"
+    "check": "npm run typecheck && npm run test:lexicon && npx expo export --platform web",
+    "test:lexicon": "node scripts/test-lexicon.mjs",
+    "build:lexicon": "node scripts/build-lexicon.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

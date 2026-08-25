@@ -11,7 +11,7 @@ export type Language = 'fr' | 'en';
 export type TargetLanguage = 'ln' | 'ktu' | 'kg';
 
 export type ThemeMode = 'light' | 'dark';
-export type MainScreen = 'dashboard' | 'work' | 'files' | 'settings';
+export type MainScreen = 'dashboard' | 'work' | 'lexicon' | 'files' | 'settings';
 
 export type CollectorCodeFormat = 'bli' | 'free';
 

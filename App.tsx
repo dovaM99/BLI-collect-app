@@ -7,6 +7,7 @@ import { AppHeader } from './src/components/AppHeader';
 import { BottomNav } from './src/components/BottomNav';
 import { DashboardScreen } from './src/screens/DashboardScreen';
 import { FilesScreen } from './src/screens/FilesScreen';
+import { LexiconScreen } from './src/screens/LexiconScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { WelcomeScreen } from './src/screens/WelcomeScreen';
@@ -43,6 +44,8 @@ function AppContent() {
     switch (screen) {
       case 'work':
         return <WorkScreen onFiles={() => setScreen('files')} onLeave={() => setScreen('dashboard')} />;
+      case 'lexicon':
+        return <LexiconScreen />;
       case 'files':
         return <FilesScreen />;
       case 'settings':
