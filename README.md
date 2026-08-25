@@ -86,6 +86,43 @@ assert hashlib.sha256(body.encode()).hexdigest() == integrity["value"]
 
 Le lot de démonstration porte l’identifiant `bli-demo-iyoba` : **écarter ce lot au dépouillement**, ses consignes trilingues sont des ébauches non relues.
 
+## Lexique
+
+Un onglet **Lexique** donne accès hors connexion à un dictionnaire de 2 017 entrées français / anglais / lingala, consultable quelle que soit la langue de collecte en cours.
+
+**Données.** La source qu’on modifie est `lexicon/dictionnaire_francais_english_lingala.csv`. `src/data/lexiconEntries.json` en est la forme compacte réellement embarquée — simple transport, aucune logique linguistique.
+
+L’application ne lit jamais le CSV : Metro n’embarque pas les `.csv`, et le redécouper à chaque démarrage serait du travail refait pour rien. **Après toute modification du CSV, il faut donc régénérer le JSON**, sinon l’app continue d’afficher l’ancien contenu :
+
+```bash
+npm run build:lexicon
+```
+
+Le script lit le CSV (guillemets, virgules dans les champs, BOM, CRLF), écarte les lignes vides et les doublons exacts, et rapporte ce qu’il a fait. Il n’ajoute aucune dépendance.
+
+**Ajouter une langue** ne demande aucune modification du moteur : ajouter la colonne dans le CSV avec l’en-tête `Kituba`, `Kikongo` ou `Portugais`, puis relancer `npm run build:lexicon`. Les en-têtes sont reconnus sans tenir compte des accents ni de la casse, et le code de langue lui-même (`ktu`, `kg`) est accepté. Le kituba et le kikongo sont déjà déclarés dans `LEXICON_LANGUAGE_ORDER` et s’affichent désactivés avec la mention « bientôt » ; ils s’activent seuls dès qu’une forme existe, sélecteur, consultation et fiche détaillée compris.
+
+**Moteur** (`src/services/lexicon/`, fonctions pures, sans dépendance) :
+
+- `normalizeLexeme.ts` — forme de recherche (NFKC, minuscules, apostrophes et tirets unifiés) séparée de la forme affichée, qui garde la typographie d’origine. Les accents ne sont **jamais** supprimés : en lingala ils sont distinctifs. Le découpage des variantes traite `,` `;` `/` `|` et les tirets **entourés d’espaces** — `pene-pene`, `bala-bala` et `mwana-mobali` restent donc intacts.
+- `damerauLevenshtein.ts` — distance avec inversion de caractères adjacents, coupe-circuit sur seuil, et `prefixDistance` qui compare la saisie en cours aux préfixes du candidat plutôt qu’au mot entier.
+- `lexiconIndex.ts` — construction de l’index, tri par point de code et recherche de plage par dichotomie.
+- `lexiconSearch.ts` — priorité stricte exact > préfixe > préfixe approché, déduplication sur langue + forme normalisée, 5 suggestions au maximum.
+
+**Consultation.** Tant que la barre de recherche est vide, l’écran affiche tout le lexique par ordre alphabétique — 2 019 mots en français, 2 026 en anglais, 2 163 en lingala, chaque forme une seule fois. Dès qu’on tape, la liste se réduit aux correspondances. La liste est virtualisée (`FlatList` avec `getItemLayout`) : le défilement reste fluide sur plusieurs milliers de lignes.
+
+L’ordre d’affichage ignore les caractères de tête qui ne sont pas des lettres. Le dictionnaire contient des amorces parasites — `(sound)`, `(fight) kobetana makofi`, `4 hectare)` — qui, triées par point de code, se rassemblaient toutes en tête de liste. Elles retrouvent ainsi leur place alphabétique réelle. Ce classement ne concerne que l’affichage : l’index conserve un ordre de points de code strict, dont dépend la recherche par plage.
+
+L’index est construit à la première ouverture de l’écran (20 ms pour 2 017 entrées), jamais au démarrage : un collecteur qui n’ouvre pas le lexique ne paie rien. Une recherche approchée coûte environ 2 ms.
+
+**Une correction délibérée par rapport à la spécification** : lorsque le mot saisi existe tel quel, la liste n’est pas complétée par des voisins orthographiques. Taper « eau » et obtenir « eau, aube, beau, haut, peau » donnait l’impression que l’application n’avait pas compris. Le repli approché reste actif dès qu’il n’y a pas de correspondance exacte.
+
+Aucune correction n’est jamais imposée : les suggestions approchées portent un point orange et l’utilisateur choisit.
+
+```bash
+npm run test:lexicon   # normalisation, variantes, distances, classement, séparation des langues, performance
+```
+
 ## Schéma de stockage
 
 L’état local est en `schemaVersion: 4`, clé `@bli-collect/state/v4`. Les états v1 à v3 sont migrés automatiquement à la première ouverture. Les profils antérieurs à la v4 n’ayant pas de code collecteur, leur nom d’utilisateur est repris comme code au format « libre » et leur langue de collecte est fixée à `ln` : toute donnée produite avant la v4 doit être revérifiée avant d’entrer dans le corpus.

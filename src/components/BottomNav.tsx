@@ -16,6 +16,7 @@ type Item = {
 const items: Item[] = [
   { key: 'dashboard', icon: 'home-outline', activeIcon: 'home', labelKey: 'dashboard' },
   { key: 'work', icon: 'clipboard-outline', activeIcon: 'clipboard', labelKey: 'tasks' },
+  { key: 'lexicon', icon: 'book-outline', activeIcon: 'book', labelKey: 'lexicon' },
   { key: 'files', icon: 'folder-outline', activeIcon: 'folder', labelKey: 'files' },
   { key: 'settings', icon: 'settings-outline', activeIcon: 'settings', labelKey: 'settings' },
 ];
@@ -72,7 +73,7 @@ const styles = StyleSheet.create({
     maxWidth: layout.maxWidth,
     alignSelf: 'center',
     flexDirection: 'row',
-    gap: 5,
+    gap: 3,
   },
   item: {
     flex: 1,
@@ -86,7 +87,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.navy,
   },
   label: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   indicator: {
