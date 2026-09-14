@@ -11,13 +11,15 @@ import { Screen } from '../components/Screen';
 import { formatCollectorCode } from '../utils/collectorCode';
 import { TARGET_LANGUAGE_LABELS } from '../utils/targetLanguages';
 import type { ThemeMode } from '../types';
+import { useAuth } from '../auth/AuthContext';
 
 type Props = {
   onFiles: () => void;
 };
 
 export function SettingsScreen({ onFiles }: Props) {
-  const { abandonCollection, logout, setLanguage, setTheme, state, t, theme } = useApp();
+  const { abandonCollection, logout, setLanguage, setTheme, snapshot, state, t, theme } = useApp();
+  const auth = useAuth();
   const packName = state.preferences.language === 'en' ? state.pack.nameEn ?? state.pack.name : state.pack.name;
   const hasCollectionProgress = state.sessions.some((session) => session.packId === state.pack.id)
     || Object.values(state.annotations).some((annotation) => annotation.packId === state.pack.id);
@@ -36,10 +38,9 @@ export function SettingsScreen({ onFiles }: Props) {
         text: t('abandon'),
         style: 'destructive',
         onPress: () => {
-          const abandonedState = abandonCollection();
-          void writeExportFile(abandonedState)
-            .then(() => Alert.alert(t('abandonConfirmed'), t('abandonConfirmedBody')))
-            .catch(() => Alert.alert(t('abandonConfirmed'), t('genericError')));
+          void writeExportFile(snapshot())
+            .then(() => { abandonCollection(); auth.lock(); Alert.alert(t('abandonConfirmed'), t('abandonConfirmedBody')); })
+            .catch(() => Alert.alert(t('exports'), t('genericError')));
         },
       },
     ]);
@@ -71,8 +72,8 @@ export function SettingsScreen({ onFiles }: Props) {
               </Text>
             </View>
             <Ionicons
-              color={state.profile.collectorCodeChecksumOk === false ? colors.red : theme.success}
-              name={state.profile.collectorCodeChecksumOk === false ? 'alert-circle' : 'shield-checkmark'}
+              color={theme.success}
+              name="shield-checkmark"
               size={24}
             />
           </View>

@@ -129,6 +129,8 @@ export type AnnotationMetrics = {
 };
 
 export type Annotation = {
+  /** Absent pour les travaux produits avant une activation signée. */
+  authorizationId?: string;
   taskId: string;
   packId: string;
   sessionId: string;
@@ -261,6 +263,7 @@ export type AssignmentManifest = {
 };
 
 export type CompactAnnotation = {
+  authorizationId?: string;
   id: string;
   session: string;
   language: TargetLanguage;

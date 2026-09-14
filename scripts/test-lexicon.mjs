@@ -32,9 +32,9 @@ execFileSync(
   [
     'tsc', 'src/services/lexicon/index.ts',
     '--outDir', outDir,
-    '--module', 'commonjs', '--target', 'es2020',
-    '--skipLibCheck', '--esModuleInterop',
-    '--moduleResolution', 'node', '--resolveJsonModule',
+    '--module', 'node16', '--target', 'es2020', '--ignoreConfig',
+    '--skipLibCheck', '--esModuleInterop', '--types', 'node',
+    '--moduleResolution', 'node16', '--resolveJsonModule',
   ],
   { cwd: root, stdio: 'inherit' },
 );

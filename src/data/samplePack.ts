@@ -1,5 +1,6 @@
 import { createInstallationId } from '../utils/appInfo';
 import type { AppState, PackRecord, TaskPack } from '../types';
+import { betaPack } from './betaPack';
 
 const mask = require('../../images/WLA_metmuseum_Pendant_Mask_Iyoba_Court_of_Benin.webp');
 
@@ -131,13 +132,16 @@ export const initialState: AppState = {
   profile: null,
   collectionClocks: {},
   profileWorkspaces: {},
-  packRegistry: { [samplePack.id]: packRecordFrom(samplePack) },
+  packRegistry: {
+    [samplePack.id]: packRecordFrom(samplePack),
+    [betaPack.id]: packRecordFrom(betaPack),
+  },
   abandonedCollections: [],
   preferences: {
     language: 'fr',
     theme: 'light',
   },
-  pack: samplePack,
+  pack: betaPack,
   assignment: null,
   annotations: {},
   sessions: [],

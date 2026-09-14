@@ -47,6 +47,7 @@ function compactAnnotation(
   item: PackRecord['items'][number] | undefined,
 ): CompactAnnotation {
   return {
+    authorizationId: annotation.authorizationId,
     id: annotation.taskId,
     session: annotation.sessionId,
     language: annotation.language,
@@ -260,6 +261,7 @@ export function buildExportPayload(state: AppState): CompactExportPayload {
   }
 
   (state.abandonedCollections ?? []).forEach((collection) => {
+    if (state.profile && collection.profile.id !== state.profile.id) return;
     collections.push(...abandonedCollectionExports(collection));
   });
 
@@ -316,11 +318,12 @@ export function exportFileName(state: AppState, at: string) {
 }
 
 export async function writeExportFile(state: AppState) {
-  await ensureDirectory(EXPORTS_DIRECTORY);
+  const { offlineAuth } = await import('../auth/runtime');
   const payload = buildExportPayload(state);
-  const { serialized } = sealExport(payload);
+  const document = offlineAuth.signExport(sealExport(payload).document as unknown as Record<string, unknown>);
+  await ensureDirectory(EXPORTS_DIRECTORY);
   const fileUri = `${EXPORTS_DIRECTORY}${exportFileName(state, payload.at)}`;
-  await FileSystem.writeAsStringAsync(fileUri, serialized);
+  await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(document));
   return fileUri;
 }
 

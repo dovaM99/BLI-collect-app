@@ -6,32 +6,34 @@ Application Expo hors-ligne destinée aux annotateurs de la Bantu Languages Init
 
 ```bash
 npm install
+npm run authority   # Première configuration et gestion des autorisations
+# Dans un second terminal :
 npm start
 ```
 
-Scannez ensuite le QR code avec Expo Go. Le projet utilise Expo SDK 54 pour rester compatible avec la version courante d’Expo Go durant la transition SDK 57.
+Initialisez d’abord l’outil local sur http://127.0.0.1:8741 et sauvegardez-le. Il intègre sa clé publique à l’app. Scannez ensuite le QR code avec une version d’Expo Go compatible avec le SDK 57 de ce projet. Le [guide d’activation et de test](docs/beta-authentication.md) détaille le parcours complet. Aucun serveur distant n’est nécessaire.
 
 ## Parcours disponible
 
 - onboarding affiché une seule fois ;
-- identification par **code collecteur** (vérifié par caractère de contrôle), nom, prénom et **langue de collecte** ;
+- **activation signée par BLI, liée au téléphone**, puis ouverture hors ligne avec un code personnel ;
 - dashboard de progression ;
 - sessions d’annotation, brouillons automatiques et réécriture ;
 - seuil minimal de mots, réglable par langue ;
 - thèmes clair/sombre et interface français/anglais ;
 - import d’une affectation JSON Google Drive, téléchargement **reprenable** des ZIP et cache local ;
-- export compact JSON scellé, couvrant **tous** les lots travaillés sur l’appareil.
+- export JSON signé par le téléphone, couvrant les lots travaillés et archives **du collecteur connecté**, avec vérification dans l’outil local.
 
 ## Langue de collecte
 
 Deux notions distinctes coexistent.
 
 - **Langue de l’interface** (`fr` / `en`) : les libellés de l’application. Réglable à tout moment.
-- **Langue de collecte** (`ln` lingala, `ktu` kituba, `kg` kikongo) : la langue dans laquelle le collecteur écrit. Choisie à l’identification, elle est **immuable pour la durée de la session** ; pour en changer, il faut se déconnecter.
+- **Langue de collecte** (`ln` lingala, `ktu` kituba, `kg` kikongo) : la langue dans laquelle le collecteur écrit. Choisie dans la demande puis approuvée par BLI, elle est liée à l’autorisation ; pour en changer, il faut une nouvelle autorisation.
 
 Un manifeste de lot en v2 porte les trois traductions de chaque consigne. À l’installation, l’application ne charge que la consigne correspondant à la langue de collecte — les deux autres ne sont jamais écrites dans l’état persisté. Un lot ne contenant pas la langue du collecteur est refusé avec `LANGUAGE_NOT_AVAILABLE` plutôt que d’afficher une consigne dans la mauvaise langue.
 
-Une affectation peut déclarer `"language"` : elle fait alors autorité sur le choix du collecteur, ce qui évite qu’un lot kikongo soit rempli en lingala.
+Une affectation peut déclarer `"language"` : elle doit correspondre à la langue autorisée. Une affectation d’une autre langue est refusée.
 
 La langue fait partie de la clé d’une annotation (`lot:langue:item`). Un même item peut donc être répondu dans plusieurs langues sans que la seconde réponse écrase la première — c’est ce qui rend possible le corpus parallèle sur un même jeu d’images.
 
@@ -60,9 +62,9 @@ Les erreurs de Google Drive sont désormais distinguées : quota de télécharge
 
 ## Export
 
-Le fichier produit est nommé `bli_<code>_<langue>_<lot>_<horodatage>.json` et suit `docs/export.example.json`.
+Le fichier produit est nommé `bli_<code>_<langue>_<lot>_<horodatage>.json`. Son enveloppe `bli-signed-export` contient l’autorisation BLI, la signature du téléphone et le contenu compact v4 dans **`payload`**. `docs/export.example.json` décrit ce contenu historique, désormais imbriqué. Vérifier le fichier dans l’outil local avant de le dépouiller ; le SHA-256 seul ne valide pas l’identité.
 
-Points essentiels pour le dépouillement :
+Points essentiels dans `payload` pour le dépouillement :
 
 - **`collections[]`** — un bloc par couple **lot + langue de collecte**, avec `kind` valant `current` (le couple en cours), `previous` (déjà travaillé, remplacé depuis) ou `abandoned`. C’est la correction majeure de la v4 : jusqu’en v3, seul le lot actif sortait, et les annotations d’un lot terminé disparaissaient dès le téléchargement du lot suivant. Le découpage par langue garantit que `pack.targetLanguage` décrit réellement le contenu du bloc — sans lui, un lot travaillé successivement en deux langues produisait un en-tête qui contredisait ses propres annotations.
 - **`build`** — version de l’app, plateforme, modèle d’appareil et identifiant d’installation. Permet d’isoler les exports produits par un build défectueux.
@@ -78,13 +80,32 @@ import hashlib, json
 with open(chemin, encoding="utf-8") as f:
     document = json.load(f)
 
+if document.get("format") == "bli-signed-export":
+    document = document["payload"]
+
 integrity = document.pop("integrity")
 body = json.dumps(document, ensure_ascii=False, separators=(",", ":"))
 assert len(body.encode()) == integrity["bodyBytes"]
 assert hashlib.sha256(body.encode()).hexdigest() == integrity["value"]
 ```
 
-Le lot de démonstration porte l’identifiant `bli-demo-iyoba` : **écarter ce lot au dépouillement**, ses consignes trilingues sont des ébauches non relues.
+L’ancien lot de démonstration porte l’identifiant `bli-demo-iyoba` : **écarter ce lot au dépouillement**, ses consignes trilingues sont des ébauches non relues. Ses annotations sont conservées lors de la mise à jour.
+
+## Lot bêta embarqué
+
+Le lot par défaut `bli-beta-congo-100` contient **100 photos distinctes et 100 exercices** : le masque Iyoba déjà présent et 99 photographies supplémentaires provenant de Wikimedia Commons, centrées sur le Congo et l’Afrique. Elles sont embarquées dans l’application, donc consultables sans téléchargement ni connexion sur le terrain.
+
+Chaque photo porte son titre, son auteur, sa licence, la page source et les modifications techniques. Ces crédits sont visibles dans l’écran de travail ; les liens Source et Licence nécessitent Internet. Les fichiers optimisés conservent leur licence respective. Le registre complet est dans `docs/beta-photo-sources.json` et sa version lisible dans `docs/beta-photo-sources.md`.
+
+Pour cette bêta, la consigne descriptive est en français ou en anglais selon l’interface ; **la réponse reste en lingala, kituba ou kikongo**, selon la langue choisie à l’identification. Le seuil est de 15 mots. Les anciennes traductions non relues ne sont pas réutilisées. Des consignes dans les langues de collecte pourront remplacer ce repli après validation par des locuteurs.
+
+Une installation neuve démarre sur le lot bêta. Une ancienne installation encore sur le lot de démonstration y passe automatiquement, sans supprimer les annotations ni les profils. Un lot téléchargé déjà actif reste actif. L’onglet Fichiers permet d’ouvrir à tout moment les 100 photos embarquées.
+
+Les métadonnées d’export identifient ces exercices avec `source: "beta"`. Leur intégration éventuelle au corpus doit suivre la validation de la campagne bêta.
+
+L’activation signée BLI et l’outil local sont désormais implémentés. Leur configuration, les sauvegardes, les exports signés et les limites du fonctionnement hors connexion sont détaillés dans [docs/beta-authentication.md](docs/beta-authentication.md).
+
+Après modification du registre photo, `npm run build:beta-photos` vérifie les fichiers et régénère leurs références statiques pour Expo ainsi que les crédits lisibles. `npm run test:beta` vérifie les 100 fichiers, leurs empreintes, les licences, la migration des anciens profils et la conservation des annotations dans les exports. Ces vérifications n’utilisent pas le réseau.
 
 ## Lexique
 
@@ -126,3 +147,11 @@ npm run test:lexicon   # normalisation, variantes, distances, classement, sépar
 ## Schéma de stockage
 
 L’état local est en `schemaVersion: 4`, clé `@bli-collect/state/v4`. Les états v1 à v3 sont migrés automatiquement à la première ouverture. Les profils antérieurs à la v4 n’ayant pas de code collecteur, leur nom d’utilisateur est repris comme code au format « libre » et leur langue de collecte est fixée à `ln` : toute donnée produite avant la v4 doit être revérifiée avant d’entrer dans le corpus.
+
+## Accès protégés et construction bêta
+
+Les profils SQLite existants restent conservés, mais demandent une activation BLI avant de rouvrir un espace. Les travaux antérieurs ne sont pas certifiés rétroactivement. Les clés privées sont séparées des annotations (SecureStore sur téléphone, coffre chiffré hors du dépôt pour le coordinateur).
+
+`npm run test:auth` vérifie les scénarios d’activation et l’outil local. `npm run check:auth-config` vérifie que la clé publique BLI est configurée ; cette vérification est aussi exécutée avant une construction EAS. Ne jamais ajouter la clé privée ou une sauvegarde du coordinateur au dépôt.
+
+La [campagne bêta 0.3.0](docs/beta-0.3.0.md) décrit la construction du fichier AAB pour Play Console, les notes de version et l’activation des collecteurs.

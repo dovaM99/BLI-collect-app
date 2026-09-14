@@ -1,4 +1,5 @@
 import { initialState, packRecordFrom, samplePack } from '../data/samplePack';
+import { betaPack } from '../data/betaPack';
 import { annotationKeyOf } from '../utils/annotationKey';
 import { createInstallationId } from '../utils/appInfo';
 import { describeCollectorCode, normalizeCollectorCode } from '../utils/collectorCode';
@@ -142,6 +143,7 @@ function normalizeAnnotation(value: unknown, fallbackLanguage: TargetLanguage): 
   const source = value as Partial<Annotation>;
   if (!source.taskId || !source.packId || typeof source.text !== 'string') return null;
   return {
+    authorizationId: typeof source.authorizationId === 'string' && /^[a-f0-9]{32}$/.test(source.authorizationId) ? source.authorizationId : undefined,
     taskId: source.taskId,
     packId: source.packId,
     sessionId: source.sessionId ?? 'session-inconnue',
@@ -264,7 +266,13 @@ export function normalizeState(raw: string): AppState | null {
   const parsed = JSON.parse(raw) as StoredState;
   if (![1, 2, 3, 4].includes(parsed.schemaVersion ?? 0)) return null;
 
-  const pack = normalizePack(parsed.pack) ?? samplePack;
+  const storedPack = normalizePack(parsed.pack) ?? betaPack;
+  const upgradingDemo = storedPack.id === samplePack.id;
+  // Native asset IDs can change between builds. Always restore bundled
+  // resources from the current code, never from serialized numeric IDs.
+  const pack = upgradingDemo || storedPack.id === betaPack.id
+    ? { ...betaPack, targetLanguage: storedPack.targetLanguage }
+    : storedPack;
 
   const packRegistry: Record<string, PackRecord> = {};
   Object.values(parsed.packRegistry ?? {}).forEach((candidate) => {
@@ -272,6 +280,7 @@ export function normalizeState(raw: string): AppState | null {
     if (record) packRegistry[record.id] = record;
   });
   if (!packRegistry[samplePack.id]) packRegistry[samplePack.id] = packRecordFrom(samplePack);
+  if (!packRegistry[betaPack.id]) packRegistry[betaPack.id] = packRecordFrom(betaPack);
   if (!packRegistry[pack.id]) packRegistry[pack.id] = packRecordFrom(pack);
 
   const languageOfPack = (packId: string): TargetLanguage =>
@@ -288,8 +297,12 @@ export function normalizeState(raw: string): AppState | null {
   });
 
   const activeAnnotations = profile ? normalizeAnnotations(parsed.annotations, languageOfPack) : {};
-  const activeSessions = profile ? normalizeSessions(parsed.sessions, languageOfPack) : [];
-  const activeSessionId = profile ? parsed.activeSessionId ?? null : null;
+  const activeSessions = profile ? normalizeSessions(parsed.sessions, languageOfPack).map((session) =>
+    upgradingDemo && session.packId === samplePack.id && session.status === 'active'
+      ? { ...session, status: 'paused' as const }
+      : session,
+  ) : [];
+  const activeSessionId = profile && !upgradingDemo ? parsed.activeSessionId ?? null : null;
   if (profile) {
     profileWorkspaces[profile.id] = {
       profile,
@@ -308,7 +321,7 @@ export function normalizeState(raw: string): AppState | null {
     };
   }
 
-  const assignment = parsed.assignment
+  const assignment = parsed.assignment && !upgradingDemo
     ? {
         ...parsed.assignment,
         // Un téléchargement « en cours » au moment de la fermeture ne l'est plus.
@@ -330,9 +343,7 @@ export function normalizeState(raw: string): AppState | null {
     packRegistry,
     abandonedCollections,
     preferences: { ...initialState.preferences, ...parsed.preferences },
-    // Le lot de démonstration est toujours relu depuis le bundle : son image est
-    // une ressource, pas une donnée persistée.
-    pack: pack.id === samplePack.id ? { ...samplePack, targetLanguage: pack.targetLanguage } : pack,
+    pack,
     assignment,
     annotations: activeAnnotations,
     sessions: activeSessions,
