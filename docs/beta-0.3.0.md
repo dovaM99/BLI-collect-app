@@ -15,6 +15,25 @@ La clé publique BLI est intégrée dans cette version. La clé privée et le re
 
 ## Construire une nouvelle version
 
+### Sur le Mac, avec EAS Build local
+
+Les versions Android précédentes ont été construites avec **EAS Build local**. Java 17 et le SDK Android sont déjà installés sur le Mac du coordinateur. Depuis le dossier du projet :
+
+```sh
+export JAVA_HOME="/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+export PATH="$JAVA_HOME/bin:$PATH"
+npm run check:auth-config
+npx eas-cli@latest build --platform android --profile production --local --output dist-android/BLI-Collect-0.3.0-google-play.aab
+```
+
+Le chemin Java ci-dessus correspond à l'installation Homebrew de ce Mac. La compilation s'exécute sur l'ordinateur, sans attendre un serveur de compilation Expo. Une connexion Internet reste nécessaire pour récupérer les dépendances, la clé de signature Android gérée par EAS et le numéro de version. Le fichier `.aab` est enregistré dans `dist-android/` ; il n'est pas envoyé à Google Play automatiquement.
+
+Prévoir environ 10 Go d'espace libre pour travailler confortablement, surtout après une mise à jour d'Expo : Gradle doit télécharger de nouveaux outils et créer des fichiers temporaires. Une erreur `No space left on device` signifie que le disque est plein.
+
+### Sur les serveurs Expo
+
 ```sh
 npm run check
 npm run check:auth-config
