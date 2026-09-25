@@ -7,7 +7,7 @@ import { translate } from '../i18n';
 import { loadState, saveState } from '../services/storage';
 import { emptyMetrics } from '../services/storageState';
 import { useAuth } from '../auth/AuthContext';
-import { offlineAuth } from '../auth/runtime';
+import { localAuth } from '../auth/runtime';
 import { getTheme } from '../theme';
 import { annotationKey } from '../utils/annotationKey';
 import { describeCollectorCode, normalizeCollectorCode } from '../utils/collectorCode';
@@ -32,7 +32,6 @@ const BURST_THRESHOLD_CHARS = 20;
 
 export type LoginInput = {
   collectorCode: string;
-  username: string;
   firstName: string;
   lastName: string;
   targetLanguage: TargetLanguage;
@@ -73,10 +72,8 @@ function countWords(text: string) {
 }
 
 /**
- * L'identité repose désormais sur le code collecteur émis par BLI, et non plus
- * sur le triplet nom/prénom/pseudo : deux homonymes ne partagent plus le même
- * espace de travail, et une faute de frappe dans le nom ne crée plus un profil
- * fantôme qui « perd » la progression.
+ * L'identité repose sur le code collecteur généré par l'app à l'inscription,
+ * et non sur le nom : deux homonymes ne partagent pas le même espace de travail.
  */
 function identityKey(input: Pick<LoginInput, 'collectorCode'>) {
   return normalizeCollectorCode(input.collectorCode);
@@ -223,7 +220,11 @@ export function AppProvider({ children }: React.PropsWithChildren) {
 
   useEffect(() => {
     loadState().then((storedState) => {
-      const stored = syncActiveWorkspace(withTrustedClock(storedState));
+      // L'app démarre toujours en français ; l'anglais reste un choix ponctuel dans les réglages.
+      const stored = syncActiveWorkspace(withTrustedClock({
+        ...storedState,
+        preferences: { ...storedState.preferences, language: 'fr' },
+      }));
       stateRef.current = stored;
       setState(stored);
       void saveState(stored);
@@ -266,7 +267,7 @@ export function AppProvider({ children }: React.PropsWithChildren) {
   }, [commit]);
 
   const login = useCallback((input: LoginInput) => {
-    offlineAuth.requireSession(input.collectorCode, input.targetLanguage);
+    localAuth.requireSession(input.collectorCode, input.targetLanguage);
     commit((current) => {
       const now = new Date().toISOString();
       const key = identityKey(input);
@@ -292,7 +293,6 @@ export function AppProvider({ children }: React.PropsWithChildren) {
         collectorCodeFormat: status.format,
         collectorCodeChecksumOk: status.checksumOk,
         targetLanguage: input.targetLanguage,
-        username: input.username.trim(),
         firstName: input.firstName.trim(),
         lastName: input.lastName.trim(),
         createdAt: knownProfile?.createdAt ?? collectionStartedAt,
@@ -327,8 +327,8 @@ export function AppProvider({ children }: React.PropsWithChildren) {
 
   useEffect(() => {
     if (!hydrated || !auth.session) return;
-    const { language, ...identity } = auth.session.payload.identity;
-    login({ ...identity, targetLanguage: language });
+    const { collectorCode, firstName, lastName, language } = auth.session;
+    login({ collectorCode, firstName, lastName, targetLanguage: language });
     setBoundAuthEpoch(auth.sessionEpoch);
   }, [hydrated, auth.session, auth.sessionEpoch, login]);
 
@@ -429,6 +429,8 @@ export function AppProvider({ children }: React.PropsWithChildren) {
       );
       return {
         ...current,
+        // Le collecteur suivant retrouve l'écran de connexion en français.
+        preferences: { ...current.preferences, language: 'fr' },
         profile: null,
         collectionClocks: {
           ...current.collectionClocks,
@@ -463,7 +465,7 @@ export function AppProvider({ children }: React.PropsWithChildren) {
   }, [commit]);
 
   const ensureSession = useCallback(() => {
-    offlineAuth.requireSession(stateRef.current.profile?.collectorCode, stateRef.current.pack.targetLanguage);
+    localAuth.requireSession(stateRef.current.profile?.collectorCode, stateRef.current.pack.targetLanguage);
     let resolved: CollectionSession | null = null;
     commit((current) => {
       const existing = current.sessions.find(
@@ -513,7 +515,7 @@ export function AppProvider({ children }: React.PropsWithChildren) {
   }, []);
 
   const updateDraft = useCallback((taskId: string, text: string) => {
-    const authorization = offlineAuth.requireSession(stateRef.current.profile?.collectorCode, stateRef.current.pack.targetLanguage);
+    localAuth.requireSession(stateRef.current.profile?.collectorCode, stateRef.current.pack.targetLanguage);
     commit((currentState) => {
       let current = currentState;
       let sessionId = current.activeSessionId;
@@ -530,7 +532,6 @@ export function AppProvider({ children }: React.PropsWithChildren) {
       const nowMs = Date.now();
       const now = new Date(nowMs).toISOString();
       const annotation: Annotation = {
-        authorizationId: existing ? existing.authorizationId : authorization.payload.authorizationId,
         taskId,
         packId: current.pack.id,
         sessionId,
@@ -566,7 +567,7 @@ export function AppProvider({ children }: React.PropsWithChildren) {
   }, [commit]);
 
   const validateAnnotation = useCallback((taskId: string, text: string) => {
-    const authorization = offlineAuth.requireSession(stateRef.current.profile?.collectorCode, stateRef.current.pack.targetLanguage);
+    localAuth.requireSession(stateRef.current.profile?.collectorCode, stateRef.current.pack.targetLanguage);
     let complete = false;
     commit((currentState) => {
       let current = currentState;
@@ -584,7 +585,6 @@ export function AppProvider({ children }: React.PropsWithChildren) {
       const trimmed = text.trim();
       const previousMetrics = existing?.metrics ?? emptyMetrics();
       const annotation: Annotation = {
-        authorizationId: existing ? existing.authorizationId : authorization.payload.authorizationId,
         taskId,
         packId: current.pack.id,
         sessionId,
@@ -631,7 +631,7 @@ export function AppProvider({ children }: React.PropsWithChildren) {
   }, [commit]);
 
   const replacePack = useCallback((pack: TaskPack) => {
-    offlineAuth.requireSession(stateRef.current.profile?.collectorCode, pack.targetLanguage);
+    localAuth.requireSession(stateRef.current.profile?.collectorCode, pack.targetLanguage);
     commit((current) => ({
       ...current,
       pack,
@@ -679,7 +679,7 @@ export function AppProvider({ children }: React.PropsWithChildren) {
   }, [commit]);
 
   const applyAssignmentPack = useCallback((pack: TaskPack, assignment: AssignmentDownload) => {
-    offlineAuth.requireSession(stateRef.current.profile?.collectorCode, pack.targetLanguage);
+    localAuth.requireSession(stateRef.current.profile?.collectorCode, pack.targetLanguage);
     commit((current) => {
       const now = new Date().toISOString();
       const packRegistry = registerPack(current.packRegistry, pack, now);

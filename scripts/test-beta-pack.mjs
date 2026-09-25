@@ -135,17 +135,16 @@ assert.equal(restoredDownload.pack.targetLanguage, 'kg');
 assert.equal(restoredDownload.assignment.status, 'paused');
 console.log('Asset IDs refreshed after an update; downloaded assignments left in place.');
 
-const activeAuthorizationId = 'a'.repeat(32);
-const signedState = normalizeState(JSON.stringify({
+const legacyState = normalizeState(JSON.stringify({
   ...migrated,
-  annotations: { old: oldAnnotation, beta: { ...oldAnnotation, taskId: betaItem.id, packId: betaPack.id, authorizationId: activeAuthorizationId } },
+  annotations: { old: oldAnnotation, beta: { ...oldAnnotation, taskId: betaItem.id, packId: betaPack.id, authorizationId: 'a'.repeat(32) } },
   abandonedCollections: [{ id: 'other-private', abandonedAt: now, profile: { ...profile, id: 'other-collector' },
     pack: { id: samplePack.id, name: 'Demo', version: '1', targetItems: 6, targetLanguage: 'ktu' },
     annotations: [{ ...oldAnnotation, text: 'PRIVATE_OTHER_COLLECTOR' }], sessions: [], items: [] }],
 }));
-const authenticatedExport = buildExportPayload(signedState);
-const exportedAnnotations = authenticatedExport.collections.flatMap((c) => c.annotations);
-assert.equal(exportedAnnotations.find((a) => a.id === betaItem.id).authorizationId, activeAuthorizationId);
-assert.equal(exportedAnnotations.find((a) => a.id === oldAnnotation.taskId).authorizationId, undefined);
-assert.equal(JSON.stringify(authenticatedExport).includes('PRIVATE_OTHER_COLLECTOR'), false);
-console.log('Activation attribution survives storage; legacy work stays unverified; other collectors’ archives stay private.');
+const plainExport = buildExportPayload(legacyState);
+const exportedAnnotations = plainExport.collections.flatMap((c) => c.annotations);
+assert.ok(exportedAnnotations.some((a) => a.id === betaItem.id));
+assert.equal(exportedAnnotations.some((a) => 'authorizationId' in a && a.authorizationId !== undefined), false);
+assert.equal(JSON.stringify(plainExport).includes('PRIVATE_OTHER_COLLECTOR'), false);
+console.log('0.3.0 authorization references dropped from annotations; other collectors’ archives stay private.');

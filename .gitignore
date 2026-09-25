@@ -18,12 +18,3 @@ _to_delete/
 charts/
 _to_delete/
 .lexicon-test/
-
-# Local authority secrets and collector documents must never enter Git.
-.bli-collect-authority/
-.bli-authority-test/
-*.bli-private.json
-bli-sauvegarde-autorite-*.json
-bli-demande-*.json
-bli-autorisation-*.json
-bli-controle-*.json

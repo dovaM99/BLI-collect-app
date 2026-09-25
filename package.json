@@ -1,6 +1,6 @@
 {
   "name": "bli-collect-app",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "main": "index.ts",
   "scripts": {
@@ -14,14 +14,10 @@
     "build:beta-photos": "node scripts/build-beta-photos.mjs",
     "test:lexicon": "node scripts/test-lexicon.mjs",
     "build:lexicon": "node scripts/build-lexicon.mjs",
-    "authority": "tsx tools/authority/server.ts",
-    "test:auth": "tsx scripts/test-auth.ts",
-    "check:auth-config": "tsx scripts/check-auth-config.ts",
-    "eas-build-post-install": "npm run check:auth-config"
+    "test:auth": "tsx scripts/test-auth.ts"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
-    "@noble/curves": "^1.9.7",
     "@noble/hashes": "^1.8.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "eas": "^0.1.0",

@@ -65,12 +65,13 @@ function normalizeMetrics(value: unknown): AnnotationMetrics {
 function normalizeProfile(value: unknown): Profile | null {
   if (!value || typeof value !== 'object') return null;
   const source = value as Partial<Profile> & { createdAt?: string };
-  if (!source.id || !source.username || !source.firstName || !source.lastName) return null;
+  const legacy = source as { username?: string };
+  if (!source.id || !source.firstName || !source.lastName) return null;
 
   const startedAt = source.collectionStartedAt ?? source.createdAt ?? new Date().toISOString();
   // Les profils antérieurs à la v4 n'ont pas de code collecteur : on reprend le
   // nom d'utilisateur pour ne pas casser la continuité, en le marquant « libre ».
-  const rawCode = source.collectorCode ?? source.username;
+  const rawCode = source.collectorCode ?? legacy.username ?? source.id;
   const status = describeCollectorCode(rawCode);
 
   return {
@@ -79,7 +80,6 @@ function normalizeProfile(value: unknown): Profile | null {
     collectorCodeFormat: status.format,
     collectorCodeChecksumOk: status.checksumOk,
     targetLanguage: normalizeTargetLanguage(source.targetLanguage) ?? MIGRATION_DEFAULT_LANGUAGE,
-    username: source.username,
     firstName: source.firstName,
     lastName: source.lastName,
     createdAt: source.createdAt ?? startedAt,
@@ -143,7 +143,6 @@ function normalizeAnnotation(value: unknown, fallbackLanguage: TargetLanguage): 
   const source = value as Partial<Annotation>;
   if (!source.taskId || !source.packId || typeof source.text !== 'string') return null;
   return {
-    authorizationId: typeof source.authorizationId === 'string' && /^[a-f0-9]{32}$/.test(source.authorizationId) ? source.authorizationId : undefined,
     taskId: source.taskId,
     packId: source.packId,
     sessionId: source.sessionId ?? 'session-inconnue',

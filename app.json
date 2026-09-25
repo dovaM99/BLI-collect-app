@@ -2,7 +2,7 @@
   "expo": {
     "name": "BLI Collect",
     "slug": "bli-collect",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -13,8 +13,6 @@
       "package": "com.bantulanguagesinitiative.bli_collect",
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.INTERNET"
       ]
     },

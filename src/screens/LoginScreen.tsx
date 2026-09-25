@@ -7,99 +7,111 @@ import { Screen } from '../components/Screen';
 import { TextField } from '../components/TextField';
 import { useApp } from '../state/AppContext';
 import { useAuth } from '../auth/AuthContext';
-import { offlineAuth } from '../auth/runtime';
+import { localAuth } from '../auth/runtime';
 import { authText } from '../auth/messages';
-import { pickAuthorization, shareRequest } from '../auth/files';
-import { fingerprint, type Authorization, type Identity } from '../auth/protocol';
-import { normalizeCollectorCode } from '../utils/collectorCode';
+import type { CollectorLanguage } from '../auth/engine';
 import { TARGET_LANGUAGES, TARGET_LANGUAGE_LABELS } from '../utils/targetLanguages';
+
+type Mode = 'unlock' | 'register' | 'forgot';
 
 export function LoginScreen() {
   const { state, t, theme } = useApp();
   const auth = useAuth();
   const a = (key: string) => authText(state.preferences.language, key);
-  const pending = auth.requests.filter((r) => !auth.authorizations.some((v) => v.payload.requestId === r.payload.requestId));
-  const accounts = auth.authorizations.filter((v, i, all) => !all.slice(i + 1).some((next) => next.payload.identity.collectorCode === v.payload.identity.collectorCode));
-  const [mode, setMode] = useState<'unlock' | 'request' | 'pending'>(accounts.length ? 'unlock' : pending.length ? 'pending' : 'request');
-  const [selected, setSelected] = useState(auth.selectedId ?? accounts[0]?.payload.authorizationId ?? '');
-  const [identity, setIdentity] = useState<Identity>({
-    collectorCode: state.profile?.collectorCode ?? '', username: state.profile?.username ?? '',
-    firstName: state.profile?.firstName ?? '', lastName: state.profile?.lastName ?? '', language: state.profile?.targetLanguage ?? 'ln',
-  });
+  const [mode, setMode] = useState<Mode>(auth.accounts.length ? 'unlock' : 'register');
+  const [selected, setSelected] = useState(auth.selectedCode ?? auth.accounts[auth.accounts.length - 1]?.collectorCode ?? '');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [language, setLanguage] = useState<CollectorLanguage>(state.profile?.targetLanguage ?? 'ln');
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
-  const [authorization, setAuthorization] = useState<Authorization | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const disabled = Platform.OS === 'web';
-  const run = async (fn: () => Promise<void>) => {
+  const account = auth.accounts.find((entry) => entry.collectorCode === selected);
+
+  const go = (next: Mode) => {
+    setMode(next); setError(null); setPin(''); setConfirmPin('');
+    // Jamais pré-rempli : pour « code oublié », c'est la saisie du nom qui fait office de vérification.
+    if (next !== 'unlock') { setFirstName(''); setLastName(''); }
+  };
+  const run = async (fn: () => Promise<unknown>) => {
     if (busy) return;
     Keyboard.dismiss(); setBusy(true); setError(null);
     try { await fn(); } catch (e) { setError(a(e instanceof Error ? e.message : 'generic')); }
     finally { auth.refresh(); setBusy(false); setPin(''); setConfirmPin(''); }
   };
-  const importFile = () => run(async () => {
-    if (!offlineAuth.trust.keys.length) throw new Error('ISSUER_NOT_CONFIGURED');
-    const document = await pickAuthorization();
-    if (document) setAuthorization(offlineAuth.previewAuthorization(document));
-  });
+  const checkConfirm = () => { if (pin !== confirmPin) throw new Error('PIN_MISMATCH'); };
+
   const body = (value: string) => <Text style={[styles.body, { color: theme.muted }]}>{value}</Text>;
-  const button = (label: string, onPress: () => void, outline = false) => <PrimaryButton compact label={label} onPress={onPress} disabled={disabled || busy} loading={busy && !outline} variant={outline ? 'outline' : 'gradient'} />;
+  const button = (label: string, onPress: () => void, outline = false) => (
+    <PrimaryButton compact label={label} onPress={onPress} disabled={busy} loading={busy && !outline} variant={outline ? 'outline' : 'gradient'} />
+  );
+  const pinField = (label: string, value: string, onChange: (v: string) => void, onSubmit?: () => void) => (
+    <TextField icon="lock-closed-outline" accessibilityLabel={label} placeholder={label} secureTextEntry keyboardType="number-pad"
+      maxLength={12} value={value} onChangeText={(v) => onChange(v.replace(/\D/g, ''))} onSubmitEditing={onSubmit} />
+  );
+  const nameFields = (
+    <>
+      <TextField icon="person-outline" autoCapitalize="words" autoCorrect={false} accessibilityLabel={t('firstName')} placeholder={t('firstName')} maxLength={80} value={firstName} onChangeText={setFirstName} />
+      <TextField icon="person-outline" autoCapitalize="words" autoCorrect={false} accessibilityLabel={t('lastName')} placeholder={t('lastName')} maxLength={80} value={lastName} onChangeText={setLastName} />
+    </>
+  );
+  const unlock = () => void run(() => localAuth.unlock(selected, pin));
+
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: theme.background }}>
       <Screen>
         <View style={styles.logo}><AppLogo /></View>
         <Text style={[styles.title, { color: theme.text }]}>{a('title')}</Text>
-        {body(a('intro'))}
-        {Platform.OS === 'web' ? body(a('web')) : !offlineAuth.trust.keys.length ? body(a('unconfigured')) : null}
-        {auth.error ? <Card><Text style={{ color: theme.text }}>{a(auth.error)}</Text><PrimaryButton label={a('retry')} onPress={auth.retry} /></Card> : (
+        {auth.error ? (
+          <Card><Text style={{ color: theme.text }}>{a(auth.error)}</Text><PrimaryButton label={a('retry')} onPress={auth.retry} /></Card>
+        ) : (
           <View style={styles.form}>
-            {authorization ? <>
-              <Card>
-                <Text style={[styles.subtitle, { color: theme.success }]}>{a('approved')}</Text>
-                {body(`${authorization.payload.identity.firstName} ${authorization.payload.identity.lastName} · ${authorization.payload.identity.collectorCode}`)}
-                {body(`${TARGET_LANGUAGE_LABELS[authorization.payload.identity.language]} · ${a('campaign')} : ${authorization.payload.campaignId}`)}
-              </Card>
-              {body(a('pinBody'))}
-              <TextField icon="lock-closed-outline" accessibilityLabel={a('pin')} placeholder={a('pin')} secureTextEntry keyboardType="number-pad" maxLength={12} value={pin} onChangeText={setPin} />
-              <TextField icon="lock-closed-outline" accessibilityLabel={a('confirmPin')} placeholder={a('confirmPin')} secureTextEntry keyboardType="number-pad" maxLength={12} value={confirmPin} onChangeText={setConfirmPin} />
-              {button(a('activate'), () => void run(async () => {
-                if (pin !== confirmPin) throw new Error('PIN_MISMATCH');
-                await offlineAuth.activate(authorization, pin);
-                setAuthorization(null);
-              }))}
-              {button(a('back'), () => setAuthorization(null), true)}
-            </> : mode === 'unlock' ? <>
-              {accounts.map((account) => <Pressable key={account.payload.authorizationId} disabled={busy} accessibilityRole="radio" accessibilityState={{ checked: selected === account.payload.authorizationId }} onPress={() => setSelected(account.payload.authorizationId)} style={[styles.option, { borderColor: selected === account.payload.authorizationId ? theme.success : theme.border, backgroundColor: theme.surface }]}>
-                <Text style={[styles.subtitle, { color: theme.text }]}>{account.payload.identity.firstName} {account.payload.identity.lastName}</Text>
-                {body(`${account.payload.identity.collectorCode} · ${TARGET_LANGUAGE_LABELS[account.payload.identity.language]}`)}
-              </Pressable>)}
-              <TextField icon="lock-closed-outline" accessibilityLabel={a('pin')} placeholder={a('pin')} secureTextEntry keyboardType="number-pad" maxLength={12} value={pin} onChangeText={setPin} onSubmitEditing={() => void run(async () => { await offlineAuth.unlock(selected, pin); })} />
-              {button(a('unlock'), () => void run(async () => { await offlineAuth.unlock(selected, pin); }))}
-              {button(a('recovery'), () => { setMode('request'); setPin(''); setError(null); }, true)}
-              {pending.length ? button(a('pending'), () => setMode('pending'), true) : null}
-            </> : mode === 'request' ? <>
-              {body(a('requestBody'))}
-              {accounts.length ? body(a('recoveryBody')) : null}
-              {(['collectorCode', 'username', 'firstName', 'lastName'] as const).map((field) => <TextField key={field} autoCapitalize={field === 'collectorCode' ? 'characters' : field === 'username' ? 'none' : 'words'} autoCorrect={false} icon={field === 'collectorCode' ? 'key-outline' : 'person-outline'} accessibilityLabel={t(field)} placeholder={t(field)} value={identity[field]} maxLength={field === 'collectorCode' ? 24 : 60} onChangeText={(value) => setIdentity({ ...identity, [field]: value })} />)}
+            {mode === 'unlock' ? <>
+              <Text style={[styles.subtitle, { color: theme.text }]}>{a('unlockTitle')}</Text>
+              {auth.accounts.length > 1 ? auth.accounts.map((entry) => (
+                <Pressable key={entry.collectorCode} disabled={busy} accessibilityRole="radio" accessibilityState={{ checked: selected === entry.collectorCode }}
+                  onPress={() => { setSelected(entry.collectorCode); setError(null); }}
+                  style={[styles.option, { borderColor: selected === entry.collectorCode ? theme.success : theme.border, backgroundColor: theme.surface }]}>
+                  <Text style={[styles.subtitle, { color: theme.text }]}>{entry.firstName} {entry.lastName}</Text>
+                  {body(TARGET_LANGUAGE_LABELS[entry.language])}
+                </Pressable>
+              )) : account ? (
+                <Card><Text style={[styles.subtitle, { color: theme.text }]}>{account.firstName} {account.lastName}</Text>{body(TARGET_LANGUAGE_LABELS[account.language])}</Card>
+              ) : null}
+              {account && !account.pinSet ? <>
+                {body(a('migratedBody'))}
+                {button(a('choosePin'), () => go('forgot'))}
+              </> : <>
+                {pinField(a('pin'), pin, setPin, unlock)}
+                {button(a('unlock'), unlock)}
+                {button(a('forgot'), () => go('forgot'), true)}
+              </>}
+              {button(a('newCollector'), () => go('register'), true)}
+            </> : mode === 'register' ? <>
+              <Text style={[styles.subtitle, { color: theme.text }]}>{a('registerTitle')}</Text>
+              {body(a('intro'))}
+              {nameFields}
               <Text style={[styles.subtitle, { color: theme.text }]}>{t('targetLanguage')}</Text>
-              <View style={styles.languages}>{TARGET_LANGUAGES.map((language) => <Pressable key={language} accessibilityRole="radio" accessibilityState={{ checked: identity.language === language }} onPress={() => setIdentity({ ...identity, language })} style={[styles.language, { backgroundColor: identity.language === language ? theme.successSoft : theme.surface, borderColor: theme.border }]}><Text style={{ color: theme.text }}>{TARGET_LANGUAGE_LABELS[language]}</Text></Pressable>)}</View>
-              {button(a('create'), () => void run(async () => {
-                await offlineAuth.createRequest({ ...identity, collectorCode: normalizeCollectorCode(identity.collectorCode), firstName: identity.firstName.trim(), lastName: identity.lastName.trim(), username: identity.username.trim() });
-                setMode('pending');
-              }))}
-              {accounts.length ? button(a('back'), () => setMode('unlock'), true) : null}
-              {pending.length ? button(a('pending'), () => setMode('pending'), true) : null}
+              <View style={styles.languages}>{TARGET_LANGUAGES.map((entry) => (
+                <Pressable key={entry} accessibilityRole="radio" accessibilityState={{ checked: language === entry }} onPress={() => setLanguage(entry)}
+                  style={[styles.language, { backgroundColor: language === entry ? theme.successSoft : theme.surface, borderColor: language === entry ? theme.success : theme.border }]}>
+                  <Text style={{ color: theme.text }}>{TARGET_LANGUAGE_LABELS[entry]}</Text>
+                </Pressable>
+              ))}</View>
+              {body(a('pinBody'))}
+              {pinField(a('pin'), pin, setPin)}
+              {pinField(a('confirmPin'), confirmPin, setConfirmPin)}
+              {button(a('register'), () => void run(async () => { checkConfirm(); await localAuth.register({ firstName, lastName, language }, pin); }))}
+              {auth.accounts.length ? button(a('back'), () => go('unlock'), true) : null}
             </> : <>
-              {body(a('pendingBody'))}
-              {pending.map((request) => <Card key={request.payload.requestId}>
-                <Text style={[styles.subtitle, { color: theme.text }]}>{request.payload.identity.firstName} {request.payload.identity.lastName}</Text>
-                {body(`${request.payload.identity.collectorCode} · ${TARGET_LANGUAGE_LABELS[request.payload.identity.language]}`)}
-                {body(`${a('device')} : ${fingerprint(request.payload.devicePublicKey)}`)}
-                {button(a('share'), () => void run(async () => { await shareRequest(request); }), true)}
-              </Card>)}
-              {button(a('import'), () => void importFile())}
-              {button(a('back'), () => setMode(accounts.length ? 'unlock' : 'request'), true)}
+              <Text style={[styles.subtitle, { color: theme.text }]}>{account && !account.pinSet ? a('choosePin') : a('forgotTitle')}</Text>
+              {body(account && !account.pinSet ? a('migratedBody') : a('forgotBody'))}
+              {nameFields}
+              {pinField(a('newPin'), pin, setPin)}
+              {pinField(a('confirmPin'), confirmPin, setConfirmPin)}
+              {button(a('resetPin'), () => void run(async () => { checkConfirm(); await localAuth.resetPin(firstName, lastName, pin); }))}
+              {button(a('back'), () => go(auth.accounts.length ? 'unlock' : 'register'), true)}
             </>}
             {error ? <Text accessibilityRole="alert" style={{ color: theme.warning }}>{error}</Text> : null}
           </View>

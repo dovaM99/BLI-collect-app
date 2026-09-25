@@ -65,7 +65,10 @@ export function SettingsScreen({ onFiles }: Props) {
           <View style={[styles.packInfo, { backgroundColor: theme.faint }]}>
             <View style={styles.packText}>
               <Text style={[styles.packName, { color: theme.text }]}>
-                {formatCollectorCode(state.profile.collectorCode)}
+                {state.profile.firstName} {state.profile.lastName}
+              </Text>
+              <Text style={[styles.packMeta, { color: theme.muted }]}>
+                {t('collectorCode')} : {formatCollectorCode(state.profile.collectorCode)}
               </Text>
               <Text style={[styles.packMeta, { color: theme.muted }]}>
                 {t('targetLanguage')} : {TARGET_LANGUAGE_LABELS[state.profile.targetLanguage]}
@@ -73,7 +76,7 @@ export function SettingsScreen({ onFiles }: Props) {
             </View>
             <Ionicons
               color={theme.success}
-              name="shield-checkmark"
+              name="person-circle"
               size={24}
             />
           </View>
@@ -168,7 +171,7 @@ export function SettingsScreen({ onFiles }: Props) {
           <IconTile backgroundColor={theme.redSoft} color={colors.red} name="log-out-outline" />
           <View style={styles.headingText}>
             <Text style={[styles.cardTitle, { color: colors.red }]}>{t('logout')}</Text>
-            <Text style={[styles.cardBody, { color: theme.muted }]}>{state.profile?.username}</Text>
+            <Text style={[styles.cardBody, { color: theme.muted }]}>{state.profile ? `${state.profile.firstName} ${state.profile.lastName}` : ''}</Text>
           </View>
           <Ionicons color={colors.red} name="chevron-forward" size={23} />
         </Pressable>

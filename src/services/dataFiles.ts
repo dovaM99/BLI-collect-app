@@ -47,7 +47,6 @@ function compactAnnotation(
   item: PackRecord['items'][number] | undefined,
 ): CompactAnnotation {
   return {
-    authorizationId: annotation.authorizationId,
     id: annotation.taskId,
     session: annotation.sessionId,
     language: annotation.language,
@@ -184,7 +183,6 @@ function collectorOf(profile: Profile, state: AppState) {
     code: profile.collectorCode,
     codeFormat: profile.collectorCodeFormat,
     codeChecksumOk: profile.collectorCodeChecksumOk,
-    username: profile.username,
     firstName: profile.firstName,
     lastName: profile.lastName,
     targetLanguage: profile.targetLanguage,
@@ -318,9 +316,8 @@ export function exportFileName(state: AppState, at: string) {
 }
 
 export async function writeExportFile(state: AppState) {
-  const { offlineAuth } = await import('../auth/runtime');
   const payload = buildExportPayload(state);
-  const document = offlineAuth.signExport(sealExport(payload).document as unknown as Record<string, unknown>);
+  const document = sealExport(payload).document;
   await ensureDirectory(EXPORTS_DIRECTORY);
   const fileUri = `${EXPORTS_DIRECTORY}${exportFileName(state, payload.at)}`;
   await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(document));

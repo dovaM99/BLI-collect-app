@@ -42,8 +42,8 @@ function AppContent() {
     return <LoginScreen />;
   }
 
-  if (!authenticated || !state.profile || state.profile.collectorCode !== auth.session.payload.identity.collectorCode
-    || state.profile.targetLanguage !== auth.session.payload.identity.language) {
+  if (!authenticated || !state.profile || state.profile.collectorCode !== auth.session.collectorCode
+    || state.profile.targetLanguage !== auth.session.language) {
     return <View style={styles.loading}><ActivityIndicator color={colors.orange} /></View>;
   }
 

@@ -11,7 +11,7 @@ Le fichier à importer dans Play Console est un **Android App Bundle (.aab)**. L
 
 Chaque installation doit préparer sa propre demande d’accès. Le coordinateur l’importe dans l’outil local, vérifie l’identité et génère l’autorisation correspondante. Une autorisation créée dans Expo Go ne remplace pas celle de l’app installée depuis Google Play.
 
-La clé publique BLI est intégrée dans cette version. La clé privée et le registre du coordinateur restent sur son ordinateur. Voir [le parcours d’activation](beta-authentication.md).
+La clé publique BLI est intégrée dans cette version. La clé privée et le registre du coordinateur restent sur son ordinateur. (Mécanisme retiré en 0.4.0.)
 
 ## Construire une nouvelle version
 
