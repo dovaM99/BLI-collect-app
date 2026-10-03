@@ -2,6 +2,10 @@
 
 Application Expo hors-ligne destinée aux annotateurs de la Bantu Languages Initiative.
 
+Les collecteurs décrivent des photos en **lingala, kituba ou kikongo**, sans connexion. Leurs réponses sont exportées en JSON pour constituer un corpus. Version actuelle : **0.4.0** (bêta Android, Google Play — test interne).
+
+Stack : Expo SDK 57, React Native 0.86, TypeScript, SQLite (`expo-sqlite`), SecureStore. Pas de serveur : tout est local au téléphone.
+
 ## Lancer dans Expo Go
 
 ```bash
@@ -10,6 +14,39 @@ npm start
 ```
 
 Scannez le QR code avec une version d’Expo Go compatible avec le SDK 57 de ce projet. Aucun serveur distant n’est nécessaire.
+
+## Commandes
+
+| Commande | Rôle |
+| --- | --- |
+| `npm start` | Serveur Expo (ajouter `-- --lan` pour un téléphone sur le même réseau) |
+| `npm run typecheck` | Vérification TypeScript |
+| `npm run test:auth` | Accès collecteur (inscription, code, code oublié, migration 0.3.0) |
+| `npm run test:beta` | Lot bêta embarqué, migrations d’état, exports |
+| `npm run test:lexicon` | Moteur de recherche du lexique |
+| `npm run check` | Tout ce qui précède + export Web |
+| `npm run build:lexicon` | Régénère `src/data/lexiconEntries.json` depuis le CSV |
+| `npm run build:beta-photos` | Régénère les références des 100 photos bêta |
+
+La construction du fichier `.aab` pour Google Play est décrite dans [docs/beta-0.4.0.md](docs/beta-0.4.0.md).
+
+## Structure du projet
+
+```text
+App.tsx                 navigation : bienvenue → connexion → écrans principaux
+src/auth/               accès collecteur local (comptes, code personnel)
+src/state/AppContext    état de l’app, sessions, annotations, persistance
+src/screens/            écrans (Connexion, Tableau de bord, Travail, Fichiers, Lexique, Réglages)
+src/services/           stockage, migrations, export, affectations ZIP, téléchargement, lexique
+src/data/               lot bêta embarqué, photos, lexique compilé
+src/utils/              code collecteur, langues cibles, clés d’annotation
+scripts/                tests et générateurs (Node, sans réseau)
+docs/                   formats d’échange, crédits photos, notes de version
+lexicon/                CSV source du dictionnaire
+images/beta/            100 photos embarquées (WebP)
+```
+
+Les consignes pour les agents de code (Claude, Codex…) sont dans [AGENTS.md](AGENTS.md).
 
 ## Parcours disponible
 
