@@ -22,15 +22,15 @@ Developers can [run the project locally](docs/TECHNICAL_README.md#run-locally).
 
 **Create your access → open a photo → write → validate → export and share.**
 
-The screenshots below show the real 0.4.0 Web preview at a phone-sized width, using a fictional collector, **Amina Demo**. They use the app’s default French interface; the French button names are included in the instructions. On a phone, exporting opens the native sharing options.
+The screenshots below show the real 0.4.0 Web preview at a phone-sized width, using a fictional collector, **Amina Demo**. English is preselected for these illustrations, including the access screen, and the instructions use English button names. A fresh installation starts in French; after signing in, select **Réglages → English** to use the English interface. On a phone, exporting opens the native sharing options.
 
 ### 1. Create your access and start a pack
 
-On the welcome screen, tap **Commencer**. Enter your first and last names, select your collection language, then choose and confirm a **personal code of 4–12 digits**. Tap **Entrer dans l’application** to enter.
+On the welcome screen, tap **Get started**. Enter your first and last names, select your collection language, then choose and confirm a **personal code of 4–12 digits**. Tap **Enter the app** to enter.
 
 The app creates your collector ID automatically. Your personal code lets you reopen your workspace after signing out or restarting the app.
 
-On **Accueil** (Home), check your progress and tap **Commencer le lot** (Start the pack). The 100-photo beta pack is ready without a download.
+On **Home**, check your progress and tap **Start the pack**. The 100-photo beta pack is ready without a download.
 
 <table>
   <tr>
@@ -47,9 +47,9 @@ On **Accueil** (Home), check your progress and tap **Commencer le lot** (Start t
 
 Read the prompt under the photo and describe what you can actually see, **in your chosen collection language**. For the beta pack, write at least **15 words**; the word counter helps you check.
 
-Your draft is saved automatically. Tap **Valider la phrase** (Validate the sentence) when it is ready: your progress increases and the next unfinished image opens. Use the image arrows to revisit and edit a response.
+Your draft is saved automatically. Tap **Validate sentence** when it is ready: your progress increases and the next unfinished image opens. Use the image arrows to revisit and edit a response.
 
-You can stop and come back later. From Home, **Continuer le travail** (Continue working) takes you back to your collection. You do not have to finish all 100 photos in one sitting.
+You can stop and come back later. From Home, **Continue working** takes you back to your collection. You do not have to finish all 100 photos in one sitting.
 
 <table>
   <tr>
@@ -64,12 +64,12 @@ You can stop and come back later. From Home, **Continuer le travail** (Continue 
 
 ### 3. Look up a word, then export your work
 
-Need a word? Open **Lexique** (Dictionary), choose the source and target languages, and search. Tap a result to see its translations. The dictionary works offline and currently covers French, English and Lingala; Kituba and Kikongo entries are planned.
+Need a word? Open **Lexicon**, choose the source and target languages, and search. Tap a result to see its translations. The dictionary works offline and currently covers French, English and Lingala; Kituba and Kikongo entries are planned.
 
 To hand over your work:
 
-1. Open **Fichiers** (Files) and find **Exports d’annotations**.
-2. Check the number of annotations included, then tap **Exporter l’état actuel** (Export current work).
+1. Open **Files** and find **Annotation exports**.
+2. Check the number of annotations included, then tap **Export current state**.
 3. On your phone, choose where to save or share the generated **JSON file**. Send that file to your coordinator using the agreed channel, such as WhatsApp or email, when a connection is available.
 
 **You can export before finishing the pack.** The file includes your non-empty drafts and validated responses, including work from earlier packs. Exporting keeps your work in the app, so you can continue collecting and export again later.
@@ -80,8 +80,8 @@ To hand over your work:
     <th>Export your collection</th>
   </tr>
   <tr>
-    <td valign="top"><img src="docs/screenshots/05-lexicon.png" alt="Dictionary entry for maison, with English home and Lingala ndako" width="320" /></td>
-    <td valign="top"><img src="docs/screenshots/06-export.png" alt="Files screen showing one annotation ready to export and the Export current work button" width="320" /></td>
+    <td valign="top"><img src="docs/screenshots/05-lexicon.png" alt="Dictionary entry for home, with French maison and Lingala ndako" width="320" /></td>
+    <td valign="top"><img src="docs/screenshots/06-export.png" alt="Files screen showing one annotation ready to export and the Export current state button" width="320" /></td>
   </tr>
 </table>
 
@@ -90,9 +90,9 @@ To hand over your work:
 <a id="accès-collecteur"></a>
 
 - **Returning to your work:** enter your personal code. If several people use the same phone, choose your name first.
-- **Forgotten code:** tap **Code oublié**, enter the same first and last names used at registration, and choose a new code. Spelling and accents must match; your work is kept.
-- **A new assignment:** in **Fichiers**, paste the assignment link supplied by your coordinator or import its JSON file. Download the photos while connected; then work offline. See [pack preparation](docs/TECHNICAL_README.md#prepare-a-collection-pack) for coordinators.
-- **Interface language:** open **Réglages** (Settings) to choose English or change the theme. The interface returns to French at startup and sign-out. Your collection language stays attached to your account.
+- **Forgotten code:** tap **Forgotten code**, enter the same first and last names used at registration, and choose a new code. Spelling and accents must match; your work is kept.
+- **A new assignment:** in **Files**, paste the assignment link supplied by your coordinator or import its JSON file. Download the photos while connected; then work offline. See [pack preparation](docs/TECHNICAL_README.md#prepare-a-collection-pack) for coordinators.
+- **Interface language:** open **Settings** to change the interface language or theme. The interface returns to French at startup and sign-out. Your collection language stays attached to your account.
 - **Keeping a copy:** save or send exports regularly. Work is stored on this phone; there is currently no automatic online backup or account synchronization between devices.
 
 ## Upcoming
