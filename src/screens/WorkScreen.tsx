@@ -4,6 +4,7 @@ import {
   Alert,
   BackHandler,
   Image,
+  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -109,6 +110,15 @@ export function WorkScreen({ onLeave, onFiles }: Props) {
   const value = annotation?.text ?? '';
   const words = countWords(value);
   const imageSource = item.imageUri ? { uri: item.imageUri } : item.bundledImage;
+  const photoSourceUrl = typeof item.metadata?.sourceUrl === 'string'
+    && item.metadata.sourceUrl.startsWith('https://commons.wikimedia.org/')
+    ? item.metadata.sourceUrl : null;
+  const photoLicenseUrl = typeof item.metadata?.licenseUrl === 'string'
+    && item.metadata.licenseUrl.startsWith('https://creativecommons.org/')
+    ? item.metadata.licenseUrl : null;
+  const openCreditLink = (url: string) => {
+    void Linking.openURL(url).catch(() => Alert.alert(t('photoLinkError')));
+  };
   const progress = ((currentIndex + 1) / state.pack.items.length) * 100;
   const workingLanguage = state.pack.targetLanguage;
   const prompt = resolvePrompt(item, workingLanguage, state.preferences.language);
@@ -175,8 +185,8 @@ export function WorkScreen({ onLeave, onFiles }: Props) {
       </View>
 
       <Card style={styles.imageCard}>
-        <View style={styles.imageWrap}>
-          <Image resizeMode="cover" source={imageSource} style={styles.image} />
+        <View style={[styles.imageWrap, { backgroundColor: theme.faint }]}>
+          <Image resizeMode="contain" source={imageSource} style={styles.image} />
           {currentIndex > 0 ? (
             <Pressable
               accessibilityLabel={t('previous')}
@@ -196,7 +206,24 @@ export function WorkScreen({ onLeave, onFiles }: Props) {
             </Pressable>
           ) : null}
         </View>
-        {item.credit ? <Text style={[styles.credit, { color: theme.muted }]}>© {item.credit}</Text> : null}
+        {item.credit ? <Text style={[styles.credit, { color: theme.muted }]}>{item.credit}</Text> : null}
+        {photoSourceUrl || photoLicenseUrl ? (
+          <View style={styles.creditLinks}>
+            {item.metadata?.source === 'beta' ? (
+              <Text style={[styles.creditNote, { color: theme.muted }]}>{t('photoOptimized')}</Text>
+            ) : null}
+            {photoSourceUrl ? (
+              <Pressable accessibilityRole="link" hitSlop={8} onPress={() => openCreditLink(photoSourceUrl)}>
+                <Text style={[styles.creditLink, { color: theme.info }]}>{t('photoSource')}</Text>
+              </Pressable>
+            ) : null}
+            {photoLicenseUrl ? (
+              <Pressable accessibilityRole="link" hitSlop={8} onPress={() => openCreditLink(photoLicenseUrl)}>
+                <Text style={[styles.creditLink, { color: theme.info }]}>{t('photoLicense')}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
       </Card>
 
       <Card style={styles.instructionCard}>
@@ -350,6 +377,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 7,
     textAlign: 'right',
   },
+  creditLinks: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 14, margin: 7 },
+  creditNote: { fontSize: 10 },
+  creditLink: { fontSize: 11, textDecorationLine: 'underline' },
   instructionCard: {
     marginTop: 16,
     flexDirection: 'row',

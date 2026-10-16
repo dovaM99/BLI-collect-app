@@ -11,13 +11,15 @@ import { Screen } from '../components/Screen';
 import { formatCollectorCode } from '../utils/collectorCode';
 import { TARGET_LANGUAGE_LABELS } from '../utils/targetLanguages';
 import type { ThemeMode } from '../types';
+import { useAuth } from '../auth/AuthContext';
 
 type Props = {
   onFiles: () => void;
 };
 
 export function SettingsScreen({ onFiles }: Props) {
-  const { abandonCollection, logout, setLanguage, setTheme, state, t, theme } = useApp();
+  const { abandonCollection, logout, setLanguage, setTheme, snapshot, state, t, theme } = useApp();
+  const auth = useAuth();
   const packName = state.preferences.language === 'en' ? state.pack.nameEn ?? state.pack.name : state.pack.name;
   const hasCollectionProgress = state.sessions.some((session) => session.packId === state.pack.id)
     || Object.values(state.annotations).some((annotation) => annotation.packId === state.pack.id);
@@ -36,10 +38,9 @@ export function SettingsScreen({ onFiles }: Props) {
         text: t('abandon'),
         style: 'destructive',
         onPress: () => {
-          const abandonedState = abandonCollection();
-          void writeExportFile(abandonedState)
-            .then(() => Alert.alert(t('abandonConfirmed'), t('abandonConfirmedBody')))
-            .catch(() => Alert.alert(t('abandonConfirmed'), t('genericError')));
+          void writeExportFile(snapshot())
+            .then(() => { abandonCollection(); auth.lock(); Alert.alert(t('abandonConfirmed'), t('abandonConfirmedBody')); })
+            .catch(() => Alert.alert(t('exports'), t('genericError')));
         },
       },
     ]);
@@ -64,15 +65,18 @@ export function SettingsScreen({ onFiles }: Props) {
           <View style={[styles.packInfo, { backgroundColor: theme.faint }]}>
             <View style={styles.packText}>
               <Text style={[styles.packName, { color: theme.text }]}>
-                {formatCollectorCode(state.profile.collectorCode)}
+                {state.profile.firstName} {state.profile.lastName}
+              </Text>
+              <Text style={[styles.packMeta, { color: theme.muted }]}>
+                {t('collectorCode')} : {formatCollectorCode(state.profile.collectorCode)}
               </Text>
               <Text style={[styles.packMeta, { color: theme.muted }]}>
                 {t('targetLanguage')} : {TARGET_LANGUAGE_LABELS[state.profile.targetLanguage]}
               </Text>
             </View>
             <Ionicons
-              color={state.profile.collectorCodeChecksumOk === false ? colors.red : theme.success}
-              name={state.profile.collectorCodeChecksumOk === false ? 'alert-circle' : 'shield-checkmark'}
+              color={theme.success}
+              name="person-circle"
               size={24}
             />
           </View>
@@ -167,7 +171,7 @@ export function SettingsScreen({ onFiles }: Props) {
           <IconTile backgroundColor={theme.redSoft} color={colors.red} name="log-out-outline" />
           <View style={styles.headingText}>
             <Text style={[styles.cardTitle, { color: colors.red }]}>{t('logout')}</Text>
-            <Text style={[styles.cardBody, { color: theme.muted }]}>{state.profile?.username}</Text>
+            <Text style={[styles.cardBody, { color: theme.muted }]}>{state.profile ? `${state.profile.firstName} ${state.profile.lastName}` : ''}</Text>
           </View>
           <Ionicons color={colors.red} name="chevron-forward" size={23} />
         </Pressable>

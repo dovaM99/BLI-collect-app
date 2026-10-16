@@ -19,7 +19,7 @@ export function FilesScreen() {
     t,
     theme,
     updateAssignment,
-    useSamplePack,
+    useBundledPack,
   } = useApp();
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState<'download' | 'import' | 'export' | null>(null);
@@ -238,9 +238,9 @@ export function FilesScreen() {
           variant="outline"
         />
         {state.pack.source !== 'bundled' && !assignmentRunning ? (
-          <Pressable onPress={useSamplePack} style={({ pressed }) => [styles.textButton, pressed && styles.pressed]}>
+          <Pressable onPress={useBundledPack} style={({ pressed }) => [styles.textButton, pressed && styles.pressed]}>
             <Ionicons color={theme.muted} name="refresh-outline" size={17} />
-            <Text style={[styles.textButtonLabel, { color: theme.muted }]}>{t('samplePack')}</Text>
+            <Text style={[styles.textButtonLabel, { color: theme.muted }]}>{t('bundledPack')}</Text>
           </Pressable>
         ) : null}
       </Card>

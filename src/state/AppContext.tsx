@@ -1,10 +1,13 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState as ReactNativeAppState } from 'react-native';
 
-import { initialState, packRecordFrom, samplePack } from '../data/samplePack';
+import { initialState, packRecordFrom } from '../data/samplePack';
+import { betaPack } from '../data/betaPack';
 import { translate } from '../i18n';
 import { loadState, saveState } from '../services/storage';
 import { emptyMetrics } from '../services/storageState';
+import { useAuth } from '../auth/AuthContext';
+import { localAuth } from '../auth/runtime';
 import { getTheme } from '../theme';
 import { annotationKey } from '../utils/annotationKey';
 import { describeCollectorCode, normalizeCollectorCode } from '../utils/collectorCode';
@@ -29,7 +32,6 @@ const BURST_THRESHOLD_CHARS = 20;
 
 export type LoginInput = {
   collectorCode: string;
-  username: string;
   firstName: string;
   lastName: string;
   targetLanguage: TargetLanguage;
@@ -37,11 +39,11 @@ export type LoginInput = {
 
 type AppContextValue = {
   hydrated: boolean;
+  authenticated: boolean;
   state: AppState;
   theme: ReturnType<typeof getTheme>;
   t: (key: string, values?: Record<string, string | number>) => string;
   completeOnboarding: () => void;
-  login: (input: LoginInput) => void;
   logout: () => void;
   setLanguage: (language: Language) => void;
   setTheme: (theme: ThemeMode) => void;
@@ -55,7 +57,7 @@ type AppContextValue = {
   replacePack: (pack: TaskPack) => void;
   updateAssignment: (assignment: AssignmentDownload) => void;
   applyAssignmentPack: (pack: TaskPack, assignment: AssignmentDownload) => void;
-  useSamplePack: () => void;
+  useBundledPack: () => void;
   snapshot: () => AppState;
 };
 
@@ -70,10 +72,8 @@ function countWords(text: string) {
 }
 
 /**
- * L'identité repose désormais sur le code collecteur émis par BLI, et non plus
- * sur le triplet nom/prénom/pseudo : deux homonymes ne partagent plus le même
- * espace de travail, et une faute de frappe dans le nom ne crée plus un profil
- * fantôme qui « perd » la progression.
+ * L'identité repose sur le code collecteur généré par l'app à l'inscription,
+ * et non sur le nom : deux homonymes ne partagent pas le même espace de travail.
  */
 function identityKey(input: Pick<LoginInput, 'collectorCode'>) {
   return normalizeCollectorCode(input.collectorCode);
@@ -200,6 +200,8 @@ function nextMetrics(
 }
 
 export function AppProvider({ children }: React.PropsWithChildren) {
+  const auth = useAuth();
+  const [boundAuthEpoch, setBoundAuthEpoch] = useState<number | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [state, setState] = useState<AppState>(initialState);
   const stateRef = useRef(state);
@@ -218,7 +220,11 @@ export function AppProvider({ children }: React.PropsWithChildren) {
 
   useEffect(() => {
     loadState().then((storedState) => {
-      const stored = syncActiveWorkspace(withTrustedClock(storedState));
+      // L'app démarre toujours en français ; l'anglais reste un choix ponctuel dans les réglages.
+      const stored = syncActiveWorkspace(withTrustedClock({
+        ...storedState,
+        preferences: { ...storedState.preferences, language: 'fr' },
+      }));
       stateRef.current = stored;
       setState(stored);
       void saveState(stored);
@@ -261,6 +267,7 @@ export function AppProvider({ children }: React.PropsWithChildren) {
   }, [commit]);
 
   const login = useCallback((input: LoginInput) => {
+    localAuth.requireSession(input.collectorCode, input.targetLanguage);
     commit((current) => {
       const now = new Date().toISOString();
       const key = identityKey(input);
@@ -286,7 +293,6 @@ export function AppProvider({ children }: React.PropsWithChildren) {
         collectorCodeFormat: status.format,
         collectorCodeChecksumOk: status.checksumOk,
         targetLanguage: input.targetLanguage,
-        username: input.username.trim(),
         firstName: input.firstName.trim(),
         lastName: input.lastName.trim(),
         createdAt: knownProfile?.createdAt ?? collectionStartedAt,
@@ -298,15 +304,16 @@ export function AppProvider({ children }: React.PropsWithChildren) {
           ? { ...session, status: 'paused' as const, lastActiveAt: now }
           : session,
       );
-      // Le lot de démonstration suit la langue du collecteur ; un lot téléchargé
+      // Le lot embarqué suit la langue du collecteur ; un lot téléchargé
       // garde la langue avec laquelle il a été installé.
       const pack = current.pack.source === 'bundled'
         ? { ...current.pack, targetLanguage: input.targetLanguage }
-        : current.pack;
+        : current.pack.targetLanguage === input.targetLanguage ? current.pack : { ...betaPack, targetLanguage: input.targetLanguage };
       return {
         ...current,
         profile,
         pack,
+        assignment: pack === current.pack || current.pack.source === 'bundled' ? current.assignment : null,
         collectionClocks: {
           ...current.collectionClocks,
           [profileId]: { collectionStartedAt, lastTrustedAt },
@@ -317,6 +324,13 @@ export function AppProvider({ children }: React.PropsWithChildren) {
       };
     });
   }, [commit]);
+
+  useEffect(() => {
+    if (!hydrated || !auth.session) return;
+    const { collectorCode, firstName, lastName, language } = auth.session;
+    login({ collectorCode, firstName, lastName, targetLanguage: language });
+    setBoundAuthEpoch(auth.sessionEpoch);
+  }, [hydrated, auth.session, auth.sessionEpoch, login]);
 
   const pauseSession = useCallback(() => {
     commit((current) => {
@@ -400,6 +414,7 @@ export function AppProvider({ children }: React.PropsWithChildren) {
     }), [commit]);
 
   const logout = useCallback(() => {
+    auth.lock();
     commit((current) => {
       if (!current.profile) return current;
       const now = new Date().toISOString();
@@ -414,6 +429,8 @@ export function AppProvider({ children }: React.PropsWithChildren) {
       );
       return {
         ...current,
+        // Le collecteur suivant retrouve l'écran de connexion en français.
+        preferences: { ...current.preferences, language: 'fr' },
         profile: null,
         collectionClocks: {
           ...current.collectionClocks,
@@ -437,7 +454,7 @@ export function AppProvider({ children }: React.PropsWithChildren) {
         activeSessionId: null,
       };
     });
-  }, [commit]);
+  }, [commit, auth.lock]);
 
   const setLanguage = useCallback((language: Language) => {
     commit((current) => ({ ...current, preferences: { ...current.preferences, language } }));
@@ -448,6 +465,7 @@ export function AppProvider({ children }: React.PropsWithChildren) {
   }, [commit]);
 
   const ensureSession = useCallback(() => {
+    localAuth.requireSession(stateRef.current.profile?.collectorCode, stateRef.current.pack.targetLanguage);
     let resolved: CollectionSession | null = null;
     commit((current) => {
       const existing = current.sessions.find(
@@ -497,6 +515,7 @@ export function AppProvider({ children }: React.PropsWithChildren) {
   }, []);
 
   const updateDraft = useCallback((taskId: string, text: string) => {
+    localAuth.requireSession(stateRef.current.profile?.collectorCode, stateRef.current.pack.targetLanguage);
     commit((currentState) => {
       let current = currentState;
       let sessionId = current.activeSessionId;
@@ -548,6 +567,7 @@ export function AppProvider({ children }: React.PropsWithChildren) {
   }, [commit]);
 
   const validateAnnotation = useCallback((taskId: string, text: string) => {
+    localAuth.requireSession(stateRef.current.profile?.collectorCode, stateRef.current.pack.targetLanguage);
     let complete = false;
     commit((currentState) => {
       let current = currentState;
@@ -611,6 +631,7 @@ export function AppProvider({ children }: React.PropsWithChildren) {
   }, [commit]);
 
   const replacePack = useCallback((pack: TaskPack) => {
+    localAuth.requireSession(stateRef.current.profile?.collectorCode, pack.targetLanguage);
     commit((current) => ({
       ...current,
       pack,
@@ -658,6 +679,7 @@ export function AppProvider({ children }: React.PropsWithChildren) {
   }, [commit]);
 
   const applyAssignmentPack = useCallback((pack: TaskPack, assignment: AssignmentDownload) => {
+    localAuth.requireSession(stateRef.current.profile?.collectorCode, pack.targetLanguage);
     commit((current) => {
       const now = new Date().toISOString();
       const packRegistry = registerPack(current.packRegistry, pack, now);
@@ -698,18 +720,18 @@ export function AppProvider({ children }: React.PropsWithChildren) {
     });
   }, [commit]);
 
-  const useSamplePack = useCallback(() => {
-    const language = stateRef.current.profile?.targetLanguage ?? samplePack.targetLanguage;
-    replacePack({ ...samplePack, targetLanguage: language });
+  const useBundledPack = useCallback(() => {
+    const language = stateRef.current.profile?.targetLanguage ?? betaPack.targetLanguage;
+    replacePack({ ...betaPack, targetLanguage: language });
   }, [replacePack]);
 
   const value = useMemo<AppContextValue>(() => ({
     hydrated,
+    authenticated: !!auth.session && boundAuthEpoch === auth.sessionEpoch,
     state,
     theme: getTheme(state.preferences.theme),
     t: (key, values) => translate(state.preferences.language, key, values),
     completeOnboarding,
-    login,
     logout,
     setLanguage,
     setTheme: setThemeMode,
@@ -723,13 +745,15 @@ export function AppProvider({ children }: React.PropsWithChildren) {
     replacePack,
     updateAssignment,
     applyAssignmentPack,
-    useSamplePack,
+    useBundledPack,
     snapshot: () => stateRef.current,
   }), [
     hydrated,
+    auth.session,
+    auth.sessionEpoch,
+    boundAuthEpoch,
     state,
     completeOnboarding,
-    login,
     logout,
     setLanguage,
     setThemeMode,
@@ -743,7 +767,7 @@ export function AppProvider({ children }: React.PropsWithChildren) {
     replacePack,
     updateAssignment,
     applyAssignmentPack,
-    useSamplePack,
+    useBundledPack,
   ]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

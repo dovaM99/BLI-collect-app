@@ -17,12 +17,11 @@ export type CollectorCodeFormat = 'bli' | 'free';
 
 export type Profile = {
   id: string;
-  /** Code remis par BLI. Clé d'identité : c'est lui qui rattache le travail à une personne. */
+  /** Code généré par l'app à l'inscription. Clé d'identité : il rattache le travail à une personne. */
   collectorCode: string;
   collectorCodeFormat: CollectorCodeFormat;
   collectorCodeChecksumOk: boolean | null;
   targetLanguage: TargetLanguage;
-  username: string;
   firstName: string;
   lastName: string;
   createdAt: string;
@@ -312,7 +311,6 @@ export type ExportCollector = {
   code: string;
   codeFormat: CollectorCodeFormat;
   codeChecksumOk: boolean | null;
-  username: string;
   firstName: string;
   lastName: string;
   targetLanguage: TargetLanguage;

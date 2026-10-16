@@ -1,191 +1,128 @@
-import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-
+import { Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppLogo } from '../components/AppLogo';
+import { Card } from '../components/Card';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { Screen } from '../components/Screen';
 import { TextField } from '../components/TextField';
 import { useApp } from '../state/AppContext';
-import { colors } from '../theme';
-import { describeCollectorCode, isCollectorCodeAcceptable } from '../utils/collectorCode';
-import { TARGET_LANGUAGES, TARGET_LANGUAGE_LABELS, TARGET_LANGUAGE_NATIVE } from '../utils/targetLanguages';
-import type { TargetLanguage } from '../types';
+import { useAuth } from '../auth/AuthContext';
+import { localAuth } from '../auth/runtime';
+import { authText } from '../auth/messages';
+import type { CollectorLanguage } from '../auth/engine';
+import { TARGET_LANGUAGES, TARGET_LANGUAGE_LABELS } from '../utils/targetLanguages';
+
+type Mode = 'unlock' | 'register' | 'forgot';
 
 export function LoginScreen() {
-  const { login, t, theme } = useApp();
-  const [collectorCode, setCollectorCode] = useState('');
-  const [username, setUsername] = useState('');
-  const [lastName, setLastName] = useState('');
+  const { state, t, theme } = useApp();
+  const auth = useAuth();
+  const a = (key: string) => authText(state.preferences.language, key);
+  const [mode, setMode] = useState<Mode>(auth.accounts.length ? 'unlock' : 'register');
+  const [selected, setSelected] = useState(auth.selectedCode ?? auth.accounts[auth.accounts.length - 1]?.collectorCode ?? '');
   const [firstName, setFirstName] = useState('');
-  const [targetLanguage, setTargetLanguage] = useState<TargetLanguage | null>(null);
-  const [submitted, setSubmitted] = useState(false);
+  const [lastName, setLastName] = useState('');
+  const [language, setLanguage] = useState<CollectorLanguage>(state.profile?.targetLanguage ?? 'ln');
+  const [pin, setPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const account = auth.accounts.find((entry) => entry.collectorCode === selected);
 
-  const codeStatus = describeCollectorCode(collectorCode);
-  const codeError = () => {
-    if (!submitted) return undefined;
-    if (!collectorCode.trim()) return t('required');
-    if (!isCollectorCodeAcceptable(collectorCode)) return t('collectorCodeInvalid');
-    return undefined;
+  const go = (next: Mode) => {
+    setMode(next); setError(null); setPin(''); setConfirmPin('');
+    // Jamais pré-rempli : pour « code oublié », c'est la saisie du nom qui fait office de vérification.
+    if (next !== 'unlock') { setFirstName(''); setLastName(''); }
   };
-  const error = (value: string) => submitted && !value.trim() ? t('required') : undefined;
+  const run = async (fn: () => Promise<unknown>) => {
+    if (busy) return;
+    Keyboard.dismiss(); setBusy(true); setError(null);
+    try { await fn(); } catch (e) { setError(a(e instanceof Error ? e.message : 'generic')); }
+    finally { auth.refresh(); setBusy(false); setPin(''); setConfirmPin(''); }
+  };
+  const checkConfirm = () => { if (pin !== confirmPin) throw new Error('PIN_MISMATCH'); };
 
-  const submit = () => {
-    setSubmitted(true);
-    if (!username.trim() || !lastName.trim() || !firstName.trim()) return;
-    if (!isCollectorCodeAcceptable(collectorCode)) return;
-    if (!targetLanguage) return;
-    login({ collectorCode, username, lastName, firstName, targetLanguage });
-  };
+  const body = (value: string) => <Text style={[styles.body, { color: theme.muted }]}>{value}</Text>;
+  const button = (label: string, onPress: () => void, outline = false) => (
+    <PrimaryButton compact label={label} onPress={onPress} disabled={busy} loading={busy && !outline} variant={outline ? 'outline' : 'gradient'} />
+  );
+  const pinField = (label: string, value: string, onChange: (v: string) => void, onSubmit?: () => void) => (
+    <TextField icon="lock-closed-outline" accessibilityLabel={label} placeholder={label} secureTextEntry keyboardType="number-pad"
+      maxLength={12} value={value} onChangeText={(v) => onChange(v.replace(/\D/g, ''))} onSubmitEditing={onSubmit} />
+  );
+  const nameFields = (
+    <>
+      <TextField icon="person-outline" autoCapitalize="words" autoCorrect={false} accessibilityLabel={t('firstName')} placeholder={t('firstName')} maxLength={80} value={firstName} onChangeText={setFirstName} />
+      <TextField icon="person-outline" autoCapitalize="words" autoCorrect={false} accessibilityLabel={t('lastName')} placeholder={t('lastName')} maxLength={80} value={lastName} onChangeText={setLastName} />
+    </>
+  );
+  const unlock = () => void run(() => localAuth.unlock(selected, pin));
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={[styles.flex, { backgroundColor: theme.background }]}
-    >
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: theme.background }}>
       <Screen>
         <View style={styles.logo}><AppLogo /></View>
-        <Text style={[styles.title, { color: theme.text }]}>{t('login')}</Text>
-        <Text style={[styles.body, { color: theme.muted }]}>{t('loginBody')}</Text>
-
-        <View style={styles.form}>
-          <TextField
-            autoCapitalize="characters"
-            autoCorrect={false}
-            error={codeError()}
-            icon="key-outline"
-            onChangeText={setCollectorCode}
-            placeholder={t('collectorCode')}
-            returnKeyType="next"
-            value={collectorCode}
-          />
-          {collectorCode.trim() && codeStatus.format === 'bli' && codeStatus.checksumOk ? (
-            <View style={styles.codeConfirmed}>
-              <Ionicons color={theme.success} name="shield-checkmark-outline" size={16} />
-              <Text style={[styles.codeConfirmedText, { color: theme.success }]}>{t('collectorCodeVerified')}</Text>
-            </View>
-          ) : (
-            <Text style={[styles.hint, { color: theme.muted }]}>{t('collectorCodeHelp')}</Text>
-          )}
-
-          <TextField
-            autoCapitalize="none"
-            autoCorrect={false}
-            error={error(username)}
-            icon="person-outline"
-            onChangeText={setUsername}
-            placeholder={t('username')}
-            returnKeyType="next"
-            value={username}
-          />
-          <TextField
-            error={error(lastName)}
-            icon="id-card-outline"
-            onChangeText={setLastName}
-            placeholder={t('lastName')}
-            returnKeyType="next"
-            value={lastName}
-          />
-          <TextField
-            error={error(firstName)}
-            icon="happy-outline"
-            onChangeText={setFirstName}
-            onSubmitEditing={submit}
-            placeholder={t('firstName')}
-            returnKeyType="done"
-            value={firstName}
-          />
-        </View>
-
-        <View style={styles.languageBlock}>
-          <Text style={[styles.languageTitle, { color: theme.text }]}>{t('targetLanguage')}</Text>
-          <Text style={[styles.hint, { color: theme.muted }]}>{t('targetLanguageBody')}</Text>
-          <View style={styles.languageRow}>
-            {TARGET_LANGUAGES.map((language) => {
-              const active = targetLanguage === language;
-              return (
-                <Pressable
-                  key={language}
-                  onPress={() => setTargetLanguage(language)}
-                  style={({ pressed }) => [
-                    styles.languageOption,
-                    {
-                      backgroundColor: active ? colors.navy : theme.input,
-                      borderColor: submitted && !targetLanguage ? colors.red : active ? colors.navy : theme.border,
-                    },
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Text style={[styles.languageLabel, { color: active ? colors.white : theme.text }]}>
-                    {TARGET_LANGUAGE_LABELS[language]}
-                  </Text>
-                  <Text
-                    numberOfLines={1}
-                    style={[styles.languageNative, { color: active ? colors.white : theme.muted }]}
-                  >
-                    {TARGET_LANGUAGE_NATIVE[language]}
-                  </Text>
+        <Text style={[styles.title, { color: theme.text }]}>{a('title')}</Text>
+        {auth.error ? (
+          <Card><Text style={{ color: theme.text }}>{a(auth.error)}</Text><PrimaryButton label={a('retry')} onPress={auth.retry} /></Card>
+        ) : (
+          <View style={styles.form}>
+            {mode === 'unlock' ? <>
+              <Text style={[styles.subtitle, { color: theme.text }]}>{a('unlockTitle')}</Text>
+              {auth.accounts.length > 1 ? auth.accounts.map((entry) => (
+                <Pressable key={entry.collectorCode} disabled={busy} accessibilityRole="radio" accessibilityState={{ checked: selected === entry.collectorCode }}
+                  onPress={() => { setSelected(entry.collectorCode); setError(null); }}
+                  style={[styles.option, { borderColor: selected === entry.collectorCode ? theme.success : theme.border, backgroundColor: theme.surface }]}>
+                  <Text style={[styles.subtitle, { color: theme.text }]}>{entry.firstName} {entry.lastName}</Text>
+                  {body(TARGET_LANGUAGE_LABELS[entry.language])}
                 </Pressable>
-              );
-            })}
+              )) : account ? (
+                <Card><Text style={[styles.subtitle, { color: theme.text }]}>{account.firstName} {account.lastName}</Text>{body(TARGET_LANGUAGE_LABELS[account.language])}</Card>
+              ) : null}
+              {account && !account.pinSet ? <>
+                {body(a('migratedBody'))}
+                {button(a('choosePin'), () => go('forgot'))}
+              </> : <>
+                {pinField(a('pin'), pin, setPin, unlock)}
+                {button(a('unlock'), unlock)}
+                {button(a('forgot'), () => go('forgot'), true)}
+              </>}
+              {button(a('newCollector'), () => go('register'), true)}
+            </> : mode === 'register' ? <>
+              <Text style={[styles.subtitle, { color: theme.text }]}>{a('registerTitle')}</Text>
+              {body(a('intro'))}
+              {nameFields}
+              <Text style={[styles.subtitle, { color: theme.text }]}>{t('targetLanguage')}</Text>
+              <View style={styles.languages}>{TARGET_LANGUAGES.map((entry) => (
+                <Pressable key={entry} accessibilityRole="radio" accessibilityState={{ checked: language === entry }} onPress={() => setLanguage(entry)}
+                  style={[styles.language, { backgroundColor: language === entry ? theme.successSoft : theme.surface, borderColor: language === entry ? theme.success : theme.border }]}>
+                  <Text style={{ color: theme.text }}>{TARGET_LANGUAGE_LABELS[entry]}</Text>
+                </Pressable>
+              ))}</View>
+              {body(a('pinBody'))}
+              {pinField(a('pin'), pin, setPin)}
+              {pinField(a('confirmPin'), confirmPin, setConfirmPin)}
+              {button(a('register'), () => void run(async () => { checkConfirm(); await localAuth.register({ firstName, lastName, language }, pin); }))}
+              {auth.accounts.length ? button(a('back'), () => go('unlock'), true) : null}
+            </> : <>
+              <Text style={[styles.subtitle, { color: theme.text }]}>{account && !account.pinSet ? a('choosePin') : a('forgotTitle')}</Text>
+              {body(account && !account.pinSet ? a('migratedBody') : a('forgotBody'))}
+              {nameFields}
+              {pinField(a('newPin'), pin, setPin)}
+              {pinField(a('confirmPin'), confirmPin, setConfirmPin)}
+              {button(a('resetPin'), () => void run(async () => { checkConfirm(); await localAuth.resetPin(firstName, lastName, pin); }))}
+              {button(a('back'), () => go(auth.accounts.length ? 'unlock' : 'register'), true)}
+            </>}
+            {error ? <Text accessibilityRole="alert" style={{ color: theme.warning }}>{error}</Text> : null}
           </View>
-          {submitted && !targetLanguage ? (
-            <Text style={styles.languageError}>{t('targetLanguageRequired')}</Text>
-          ) : null}
-        </View>
-
-        <View style={[styles.localNote, { backgroundColor: theme.blueSoft }]}>
-          <Ionicons color={theme.info} name="lock-closed-outline" size={20} />
-          <Text style={[styles.localNoteText, { color: theme.text }]}>{t('localOnly')}</Text>
-        </View>
-
-        <PrimaryButton icon="arrow-forward" label={t('signIn')} onPress={submit} style={styles.button} />
+        )}
       </Screen>
     </KeyboardAvoidingView>
   );
 }
-
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  logo: { alignItems: 'center', marginTop: 6 },
-  title: {
-    textAlign: 'center',
-    fontSize: 39,
-    lineHeight: 45,
-    fontWeight: '900',
-    letterSpacing: -1.4,
-    marginTop: 2,
-  },
-  body: { textAlign: 'center', fontSize: 16, lineHeight: 23, marginTop: 8 },
-  form: { gap: 14, marginTop: 30 },
-  hint: { fontSize: 12, lineHeight: 17, marginTop: 2, marginLeft: 6 },
-  codeConfirmed: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2, marginLeft: 6 },
-  codeConfirmedText: { fontSize: 12, fontWeight: '700' },
-  languageBlock: { marginTop: 24 },
-  languageTitle: { fontSize: 17, fontWeight: '900' },
-  languageRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
-  languageOption: {
-    flex: 1,
-    borderWidth: 1.5,
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    gap: 3,
-  },
-  languageLabel: { fontSize: 14, fontWeight: '900' },
-  languageNative: { fontSize: 10, fontWeight: '600' },
-  languageError: { color: colors.red, fontSize: 13, fontWeight: '700', marginTop: 8, marginLeft: 6 },
-  pressed: { opacity: 0.7 },
-  localNote: {
-    minHeight: 62,
-    borderRadius: 18,
-    marginTop: 20,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  localNoteText: { flex: 1, fontSize: 13, lineHeight: 18, fontWeight: '600' },
-  button: { marginTop: 22 },
+  logo: { alignItems: 'center', marginVertical: 12 }, title: { fontSize: 28, fontWeight: '900', marginBottom: 10 },
+  body: { fontSize: 14, lineHeight: 21, marginVertical: 6 }, form: { gap: 14, marginTop: 20, marginBottom: 24 },
+  subtitle: { fontSize: 17, fontWeight: '700' }, option: { padding: 16, borderWidth: 2, borderRadius: 16 },
+  languages: { flexDirection: 'row', gap: 8 }, language: { flex: 1, alignItems: 'center', borderWidth: 1, borderRadius: 14, paddingVertical: 14 },
 });

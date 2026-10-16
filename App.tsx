@@ -15,16 +15,18 @@ import { WorkScreen } from './src/screens/WorkScreen';
 import { AppProvider, useApp } from './src/state/AppContext';
 import { colors } from './src/theme';
 import type { MainScreen } from './src/types';
+import { AuthProvider, useAuth } from './src/auth/AuthContext';
 
 function AppContent() {
-  const { completeOnboarding, hydrated, state, theme } = useApp();
+  const { authenticated, completeOnboarding, hydrated, state, theme } = useApp();
+  const auth = useAuth();
   const [screen, setScreen] = useState<MainScreen>('dashboard');
 
   useEffect(() => {
     if (!state.profile) setScreen('dashboard');
   }, [state.profile]);
 
-  if (!hydrated) {
+  if (!hydrated || !auth.ready) {
     return (
       <View style={[styles.loading, { backgroundColor: theme.background }]}>
         <ActivityIndicator color={colors.orange} size="large" />
@@ -36,8 +38,13 @@ function AppContent() {
     return <WelcomeScreen onStart={completeOnboarding} />;
   }
 
-  if (!state.profile) {
+  if (!auth.session || auth.error) {
     return <LoginScreen />;
+  }
+
+  if (!authenticated || !state.profile || state.profile.collectorCode !== auth.session.collectorCode
+    || state.profile.targetLanguage !== auth.session.language) {
+    return <View style={styles.loading}><ActivityIndicator color={colors.orange} /></View>;
   }
 
   const content = (() => {
@@ -80,9 +87,11 @@ function ThemedRoot() {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <AppProvider>
-        <ThemedRoot />
-      </AppProvider>
+      <AuthProvider>
+        <AppProvider>
+          <ThemedRoot />
+        </AppProvider>
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }

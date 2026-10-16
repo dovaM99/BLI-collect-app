@@ -2,6 +2,8 @@ node_modules/
 .expo/
 dist/
 dist-android/
+credentials.json
+credentials/
 web-build/
 expo-env.d.ts
 *.tsbuildinfo

@@ -2,26 +2,17 @@
   "expo": {
     "name": "BLI Collect",
     "slug": "bli-collect",
-    "version": "0.1.0",
+    "version": "0.4.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./logo/logo-bli-futurist.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#FFFFFF"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "org.bantulanguages.blicollect"
     },
     "android": {
-      "package": "org.bantulanguages.blicollect",
-      "edgeToEdgeEnabled": true,
+      "package": "com.bantulanguagesinitiative.bli_collect",
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.INTERNET"
       ]
     },
@@ -37,7 +28,20 @@
           "supportsOpeningDocumentsInPlace": true
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-secure-store",
+      "expo-font",
+      "expo-sharing",
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./logo/logo-bli-futurist.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#FFFFFF",
+          "imageWidth": 240
+        }
+      ]
     ],
     "extra": {
       "eas": {

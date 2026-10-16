@@ -1,128 +1,112 @@
+<p align="center">
+  <img src="logo/logo-bli-futurist.png" alt="Bantu Languages Initiative" width="240" />
+</p>
+
 # BLI Collect
 
-Application Expo hors-ligne destinée aux annotateurs de la Bantu Languages Initiative.
+**Describe images in your language. Help build a corpus for African languages. Work wherever you are.**
 
-## Lancer dans Expo Go
+BLI Collect is a field collection app from the **Bantu Languages Initiative**. Collectors write descriptions in **Lingala, Kituba or Kikongo**, keep their work on their phone, and share it with their coordinator when they are ready.
 
-```bash
-npm install
-npm start
-```
+The **0.4.0 beta** includes **100 photos from Congo and across Africa**, ready to use offline, plus a French–English–Lingala dictionary. You can create your own local account: no invitation code or external approval is needed.
 
-Scannez ensuite le QR code avec Expo Go. Le projet utilise Expo SDK 54 pour rester compatible avec la version courante d’Expo Go durant la transition SDK 57.
+[Your first collection](#your-first-collection) · [Upcoming](#upcoming) · [Technical details](docs/TECHNICAL_README.md)
 
-## Parcours disponible
+## Get the app
 
-- onboarding affiché une seule fois ;
-- identification par **code collecteur** (vérifié par caractère de contrôle), nom, prénom et **langue de collecte** ;
-- dashboard de progression ;
-- sessions d’annotation, brouillons automatiques et réécriture ;
-- seuil minimal de mots, réglable par langue ;
-- thèmes clair/sombre et interface français/anglais ;
-- import d’une affectation JSON Google Drive, téléchargement **reprenable** des ZIP et cache local ;
-- export compact JSON scellé, couvrant **tous** les lots travaillés sur l’appareil.
+For the Android beta, use the **Google Play testing invitation provided by your BLI coordinator**, with the Google account enrolled in the test. Install the app before going into the field; the included photos are already on the phone.
 
-## Langue de collecte
+Developers can [run the project locally](docs/TECHNICAL_README.md#run-locally).
 
-Deux notions distinctes coexistent.
+## Your first collection
 
-- **Langue de l’interface** (`fr` / `en`) : les libellés de l’application. Réglable à tout moment.
-- **Langue de collecte** (`ln` lingala, `ktu` kituba, `kg` kikongo) : la langue dans laquelle le collecteur écrit. Choisie à l’identification, elle est **immuable pour la durée de la session** ; pour en changer, il faut se déconnecter.
+**Create your access → open a photo → write → validate → export and share.**
 
-Un manifeste de lot en v2 porte les trois traductions de chaque consigne. À l’installation, l’application ne charge que la consigne correspondant à la langue de collecte — les deux autres ne sont jamais écrites dans l’état persisté. Un lot ne contenant pas la langue du collecteur est refusé avec `LANGUAGE_NOT_AVAILABLE` plutôt que d’afficher une consigne dans la mauvaise langue.
+The screenshots below show the real 0.4.0 Web preview at a phone-sized width, using a fictional collector, **Amina Demo**. English is preselected for these illustrations, including the access screen, and the instructions use English button names. A fresh installation starts in French; after signing in, select **Réglages → English** to use the English interface. On a phone, exporting opens the native sharing options.
 
-Une affectation peut déclarer `"language"` : elle fait alors autorité sur le choix du collecteur, ce qui évite qu’un lot kikongo soit rempli en lingala.
+### 1. Create your access and start a pack
 
-La langue fait partie de la clé d’une annotation (`lot:langue:item`). Un même item peut donc être répondu dans plusieurs langues sans que la seconde réponse écrase la première — c’est ce qui rend possible le corpus parallèle sur un même jeu d’images.
+On the welcome screen, tap **Get started**. Enter your first and last names, select your collection language, then choose and confirm a **personal code of 4–12 digits**. Tap **Enter the app** to enter.
 
-## Formats des données
+The app creates your collector ID automatically. Your personal code lets you reopen your workspace after signing out or restarting the app.
 
-Chaque ZIP contient `manifest.json` à sa racine et un dossier `images/`. Le format v2 est décrit dans `docs/pack-manifest.example.json` ; le format v1 (`question` + `minWords` numérique) reste accepté pour les lots déjà distribués.
+On **Home**, check your progress and tap **Start the pack**. The 100-photo beta pack is ready without a download.
 
-Le lien remis au collecteur pointe vers un JSON d’affectation au format `docs/assignment-manifest.example.json`. L’app télécharge et valide les ZIP un par un ; le travail devient disponible dès le premier bloc installé.
+<table>
+  <tr>
+    <th>Create your local access</th>
+    <th>Start with the included photos</th>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/screenshots/01-register.png" alt="Registration with a fictional name, Lingala selected and a masked personal code" width="320" /></td>
+    <td valign="top"><img src="docs/screenshots/02-dashboard.png" alt="Dashboard showing zero completed annotations out of 100 and the start button" width="320" /></td>
+  </tr>
+</table>
 
-L’installation des ZIP hors ligne se teste dans Expo Go sur iOS ou Android, pas dans l’aperçu Web. Une `sequence` peut contenir moins d’éléments que `targetItems` pour une affectation de test ou livrée par étapes ; l’objectif global reste alors celui déclaré par `targetItems`. L’app n’extrait que les images référencées par l’affectation. Le SHA-256 complet est contrôlé pour les blocs jusqu’à 256 Mo ; pour les très gros ZIP, chaque fichier réellement utilisé est contrôlé avec le CRC du ZIP afin d’éviter une seconde lecture de plusieurs gigaoctets sur le téléphone.
+### 2. Describe, validate and continue
 
-Les manifestes ne contiennent aucune date de collecte. La période fixe de deux mois démarre au premier login local du collecteur.
+Read the prompt under the photo and describe what you can actually see, **in your chosen collection language**. For the beta pack, write at least **15 words**; the word counter helps you check.
 
-## Téléchargement reprenable
+Your draft is saved automatically. Tap **Validate sentence** when it is ready: your progress increases and the next unfinished image opens. Use the image arrows to revisit and edit a response.
 
-Une coupure ne fait plus repartir un ZIP de zéro.
+You can stop and come back later. From Home, **Continue working** takes you back to your collection. You do not have to finish all 100 photos in one sitting.
 
-1. **Par plages** — si le serveur annonce `Accept-Ranges: bytes`, l’archive est tirée par tranches de 2 Mo, chacune écrite puis refermée sur le disque. Une coupure réseau, un délestage ou un `kill` Android ne coûtent au pire que la tranche en cours. L’état de reprise est conservé dans un fichier `.part.json` à côté du ZIP en cache.
-2. **En flux continu** — repli quand le serveur ne gère pas les plages, avec sauvegarde du jeton de reprise lorsque la plateforme en fournit un.
+<table>
+  <tr>
+    <th>Write a description</th>
+    <th>See your progress</th>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/screenshots/03-annotate.png" alt="Iyoba mask, writing prompt, demonstration text in Lingala, word counter and validation button" width="320" /></td>
+    <td valign="top"><img src="docs/screenshots/04-progress.png" alt="Dashboard after validation showing one completed annotation and 99 remaining" width="320" /></td>
+  </tr>
+</table>
 
-Un lot republié sous la même URL avec une taille différente invalide automatiquement le reliquat : on ne recolle jamais deux versions.
+### 3. Look up a word, then export your work
 
-Les erreurs de Google Drive sont désormais distinguées : quota de téléchargement épuisé (`DRIVE_QUOTA_EXCEEDED`), partage fermé (`DRIVE_ACCESS_DENIED`), étranglement (`DOWNLOAD_RATE_LIMITED`), coupure (`NETWORK_UNAVAILABLE`). Auparavant, tous ces cas s’affichaient comme « archive invalide ».
+Need a word? Open **Lexicon**, choose the source and target languages, and search. Tap a result to see its translations. The dictionary works offline and currently covers French, English and Lingala; Kituba and Kikongo entries are planned.
 
-> Drive n’est pas un CDN : le quota de téléchargement d’un fichier partagé est journalier et **par fichier**. Au-delà d’une dizaine de collecteurs sur le même ZIP, prévoir des copies distinctes ou un autre hébergement.
+To hand over your work:
 
-## Export
+1. Open **Files** and find **Annotation exports**.
+2. Check the number of annotations included, then tap **Export current state**.
+3. On your phone, choose where to save or share the generated **JSON file**. Send that file to your coordinator using the agreed channel, such as WhatsApp or email, when a connection is available.
 
-Le fichier produit est nommé `bli_<code>_<langue>_<lot>_<horodatage>.json` et suit `docs/export.example.json`.
+**You can export before finishing the pack.** The file includes your non-empty drafts and validated responses, including work from earlier packs. Exporting keeps your work in the app, so you can continue collecting and export again later.
 
-Points essentiels pour le dépouillement :
+<table>
+  <tr>
+    <th>Find a word offline</th>
+    <th>Export your collection</th>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/screenshots/05-lexicon.png" alt="Dictionary entry for home, with French maison and Lingala ndako" width="320" /></td>
+    <td valign="top"><img src="docs/screenshots/06-export.png" alt="Files screen showing one annotation ready to export and the Export current state button" width="320" /></td>
+  </tr>
+</table>
 
-- **`collections[]`** — un bloc par couple **lot + langue de collecte**, avec `kind` valant `current` (le couple en cours), `previous` (déjà travaillé, remplacé depuis) ou `abandoned`. C’est la correction majeure de la v4 : jusqu’en v3, seul le lot actif sortait, et les annotations d’un lot terminé disparaissaient dès le téléchargement du lot suivant. Le découpage par langue garantit que `pack.targetLanguage` décrit réellement le contenu du bloc — sans lui, un lot travaillé successivement en deux langues produisait un en-tête qui contredisait ses propres annotations.
-- **`build`** — version de l’app, plateforme, modèle d’appareil et identifiant d’installation. Permet d’isoler les exports produits par un build défectueux.
-- **`collector`** — code collecteur, format et résultat du contrôle de cohérence (`codeChecksumOk`).
-- **`metrics`** par annotation — temps de frappe actif, délai entre l’affichage de l’image et la première frappe (réarmé à chaque présentation, pas au premier affichage de la session), nombre d’éditions, plus gros ajout en un seul événement (`maxBurstChars`, signature d’un collage), suppressions. Un texte de 120 caractères avec `maxBurstChars: 118` et `activeMs: 900` n’a pas été écrit à la main.
-- **`integrity`** — SHA-256 et taille du corps sérialisé, pour détecter une troncature après un transfert WhatsApp.
+## Everyday use
 
-Vérification du sceau côté dépouillement :
+<a id="accès-collecteur"></a>
 
-```python
-import hashlib, json
+- **Returning to your work:** enter your personal code. If several people use the same phone, choose your name first.
+- **Forgotten code:** tap **Forgotten code**, enter the same first and last names used at registration, and choose a new code. Spelling and accents must match; your work is kept.
+- **A new assignment:** in **Files**, paste the assignment link supplied by your coordinator or import its JSON file. Download the photos while connected; then work offline. See [pack preparation](docs/TECHNICAL_README.md#prepare-a-collection-pack) for coordinators.
+- **Interface language:** open **Settings** to change the interface language or theme. The interface returns to French at startup and sign-out. Your collection language stays attached to your account.
+- **Keeping a copy:** save or send exports regularly. Work is stored on this phone; there is currently no automatic online backup or account synchronization between devices.
 
-with open(chemin, encoding="utf-8") as f:
-    document = json.load(f)
+## Upcoming
 
-integrity = document.pop("integrity")
-body = json.dumps(document, ensure_ascii=False, separators=(",", ":"))
-assert len(body.encode()) == integrity["bodyBytes"]
-assert hashlib.sha256(body.encode()).hexdigest() == integrity["value"]
-```
+Planned improvements, **not yet available in this beta**:
 
-Le lot de démonstration porte l’identifiant `bli-demo-iyoba` : **écarter ce lot au dépouillement**, ses consignes trilingues sont des ébauches non relues.
+- **Audio recording** to collect spoken responses alongside written descriptions.
+- **Double annotation** so two collectors can independently describe the same item, with both contributions preserved for comparison.
+- **Review and reconciliation** to help coordinators assess annotations and resolve differences.
+- **Server-based account verification and synchronization**, while preserving the ability to collect offline.
+- **More language resources**, including Kituba and Kikongo dictionary entries and prompts reviewed by speakers.
 
-## Lexique
+## For coordinators and developers
 
-Un onglet **Lexique** donne accès hors connexion à un dictionnaire de 2 017 entrées français / anglais / lingala, consultable quelle que soit la langue de collecte en cours.
+The [Technical README](docs/TECHNICAL_README.md) explains local development, the accepted pack and assignment formats, local storage, exports and Android builds.
 
-**Données.** La source qu’on modifie est `lexicon/dictionnaire_francais_english_lingala.csv`. `src/data/lexiconEntries.json` en est la forme compacte réellement embarquée — simple transport, aucune logique linguistique.
-
-L’application ne lit jamais le CSV : Metro n’embarque pas les `.csv`, et le redécouper à chaque démarrage serait du travail refait pour rien. **Après toute modification du CSV, il faut donc régénérer le JSON**, sinon l’app continue d’afficher l’ancien contenu :
-
-```bash
-npm run build:lexicon
-```
-
-Le script lit le CSV (guillemets, virgules dans les champs, BOM, CRLF), écarte les lignes vides et les doublons exacts, et rapporte ce qu’il a fait. Il n’ajoute aucune dépendance.
-
-**Ajouter une langue** ne demande aucune modification du moteur : ajouter la colonne dans le CSV avec l’en-tête `Kituba`, `Kikongo` ou `Portugais`, puis relancer `npm run build:lexicon`. Les en-têtes sont reconnus sans tenir compte des accents ni de la casse, et le code de langue lui-même (`ktu`, `kg`) est accepté. Le kituba et le kikongo sont déjà déclarés dans `LEXICON_LANGUAGE_ORDER` et s’affichent désactivés avec la mention « bientôt » ; ils s’activent seuls dès qu’une forme existe, sélecteur, consultation et fiche détaillée compris.
-
-**Moteur** (`src/services/lexicon/`, fonctions pures, sans dépendance) :
-
-- `normalizeLexeme.ts` — forme de recherche (NFKC, minuscules, apostrophes et tirets unifiés) séparée de la forme affichée, qui garde la typographie d’origine. Les accents ne sont **jamais** supprimés : en lingala ils sont distinctifs. Le découpage des variantes traite `,` `;` `/` `|` et les tirets **entourés d’espaces** — `pene-pene`, `bala-bala` et `mwana-mobali` restent donc intacts.
-- `damerauLevenshtein.ts` — distance avec inversion de caractères adjacents, coupe-circuit sur seuil, et `prefixDistance` qui compare la saisie en cours aux préfixes du candidat plutôt qu’au mot entier.
-- `lexiconIndex.ts` — construction de l’index, tri par point de code et recherche de plage par dichotomie.
-- `lexiconSearch.ts` — priorité stricte exact > préfixe > préfixe approché, déduplication sur langue + forme normalisée, 5 suggestions au maximum.
-
-**Consultation.** Tant que la barre de recherche est vide, l’écran affiche tout le lexique par ordre alphabétique — 2 019 mots en français, 2 026 en anglais, 2 163 en lingala, chaque forme une seule fois. Dès qu’on tape, la liste se réduit aux correspondances. La liste est virtualisée (`FlatList` avec `getItemLayout`) : le défilement reste fluide sur plusieurs milliers de lignes.
-
-L’ordre d’affichage ignore les caractères de tête qui ne sont pas des lettres. Le dictionnaire contient des amorces parasites — `(sound)`, `(fight) kobetana makofi`, `4 hectare)` — qui, triées par point de code, se rassemblaient toutes en tête de liste. Elles retrouvent ainsi leur place alphabétique réelle. Ce classement ne concerne que l’affichage : l’index conserve un ordre de points de code strict, dont dépend la recherche par plage.
-
-L’index est construit à la première ouverture de l’écran (20 ms pour 2 017 entrées), jamais au démarrage : un collecteur qui n’ouvre pas le lexique ne paie rien. Une recherche approchée coûte environ 2 ms.
-
-**Une correction délibérée par rapport à la spécification** : lorsque le mot saisi existe tel quel, la liste n’est pas complétée par des voisins orthographiques. Taper « eau » et obtenir « eau, aube, beau, haut, peau » donnait l’impression que l’application n’avait pas compris. Le repli approché reste actif dès qu’il n’y a pas de correspondance exacte.
-
-Aucune correction n’est jamais imposée : les suggestions approchées portent un point orange et l’utilisateur choisit.
-
-```bash
-npm run test:lexicon   # normalisation, variantes, distances, classement, séparation des langues, performance
-```
-
-## Schéma de stockage
-
-L’état local est en `schemaVersion: 4`, clé `@bli-collect/state/v4`. Les états v1 à v3 sont migrés automatiquement à la première ouverture. Les profils antérieurs à la v4 n’ayant pas de code collecteur, leur nom d’utilisateur est repris comme code au format « libre » et leur langue de collecte est fixée à `ln` : toute donnée produite avant la v4 doit être revérifiée avant d’entrer dans le corpus.
+Photos retain their individual licenses and attribution. See the [complete photo credits](docs/beta-photo-sources.md), including the Iyoba mask shown in this guide. The screenshot account and annotation are demonstration material, not collected research data.

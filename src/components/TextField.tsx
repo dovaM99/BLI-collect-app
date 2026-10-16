@@ -24,8 +24,8 @@ export function TextField({ icon, error, style, ...props }: Props) {
           <Ionicons color={error ? colors.red : theme.info} name={icon} size={24} />
         </View>
         <TextInput
-          {...props}
           autoCapitalize="words"
+          {...props}
           placeholderTextColor={theme.muted}
           selectionColor={colors.orange}
           style={[styles.input, { color: theme.text }, style]}

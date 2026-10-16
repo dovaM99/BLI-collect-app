@@ -183,7 +183,6 @@ function collectorOf(profile: Profile, state: AppState) {
     code: profile.collectorCode,
     codeFormat: profile.collectorCodeFormat,
     codeChecksumOk: profile.collectorCodeChecksumOk,
-    username: profile.username,
     firstName: profile.firstName,
     lastName: profile.lastName,
     targetLanguage: profile.targetLanguage,
@@ -260,6 +259,7 @@ export function buildExportPayload(state: AppState): CompactExportPayload {
   }
 
   (state.abandonedCollections ?? []).forEach((collection) => {
+    if (state.profile && collection.profile.id !== state.profile.id) return;
     collections.push(...abandonedCollectionExports(collection));
   });
 
@@ -316,11 +316,11 @@ export function exportFileName(state: AppState, at: string) {
 }
 
 export async function writeExportFile(state: AppState) {
-  await ensureDirectory(EXPORTS_DIRECTORY);
   const payload = buildExportPayload(state);
-  const { serialized } = sealExport(payload);
+  const document = sealExport(payload).document;
+  await ensureDirectory(EXPORTS_DIRECTORY);
   const fileUri = `${EXPORTS_DIRECTORY}${exportFileName(state, payload.at)}`;
-  await FileSystem.writeAsStringAsync(fileUri, serialized);
+  await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(document));
   return fileUri;
 }
 
